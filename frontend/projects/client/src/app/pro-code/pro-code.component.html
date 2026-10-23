@@ -1,0 +1,644 @@
+<main class="relative flex h-screen w-screen overflow-hidden bg-white font-sans text-slate-900">
+  <div class="relative z-30 flex h-full shrink-0">
+    <nav
+      class="flex h-full w-16 shrink-0 flex-col items-center gap-2 border-r border-slate-800 bg-slate-950 py-4 text-slate-100 sm:w-[4.5rem]"
+      aria-label="Pro-Code Werkzeuge"
+    >
+      <a
+        routerLink="/"
+        aria-label="Zur Anwendung"
+        class="mb-4 grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-500 text-sm font-bold text-white"
+        >E</a
+      >
+
+      <button
+        type="button"
+        draggable="false"
+        class="flex w-14 shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+        [class.bg-slate-800]="activePanel() === 'elements'"
+        [class.text-indigo-200]="activePanel() === 'elements'"
+        [attr.aria-expanded]="activePanel() === 'elements'"
+        [disabled]="saveStatus() === 'loading'"
+        (click)="togglePanel('elements')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </svg>
+        <span class="text-[10px] font-medium">Elemente</span>
+      </button>
+
+      <button
+        type="button"
+        class="flex w-14 shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+        [class.bg-slate-800]="activePanel() === 'schema'"
+        [class.text-indigo-200]="activePanel() === 'schema'"
+        [attr.aria-expanded]="activePanel() === 'schema'"
+        [disabled]="saveStatus() === 'loading'"
+        (click)="togglePanel('schema')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <path
+            d="M8 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3M16 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3M14 8l-4 8"
+          />
+        </svg>
+        <span class="text-[10px] font-medium">Schema</span>
+      </button>
+
+      <button
+        type="button"
+        class="flex w-14 shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+        [class.bg-slate-800]="activePanel() === 'history'"
+        [class.text-indigo-200]="activePanel() === 'history'"
+        [attr.aria-expanded]="activePanel() === 'history'"
+        [disabled]="saveStatus() === 'loading'"
+        (click)="togglePanel('history')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <path d="M3 12a9 9 0 1 0 2.6-6.4L3 8" />
+          <path d="M3 3v5h5M12 7v5l3.5 2" />
+        </svg>
+        <span class="text-[10px] font-medium">Verlauf</span>
+      </button>
+
+      <div class="my-2 h-px w-8 shrink-0 bg-slate-800"></div>
+      <button
+        type="button"
+        class="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        aria-label="Rückgängig"
+        title="Rückgängig"
+        [disabled]="!canUndo()"
+        (click)="undo()"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <path d="M9 14 4 9l5-5M4.5 9H14a6 6 0 0 1 0 12h-2" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        aria-label="Wiederholen"
+        title="Wiederholen"
+        [disabled]="!canRedo()"
+        (click)="redo()"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <path d="m15 14 5-5-5-5m4.5 5H10a6 6 0 0 0 0 12h2" />
+        </svg>
+      </button>
+
+      <a
+        routerLink="/"
+        class="mt-auto grid size-10 shrink-0 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+        aria-label="Zurück zur Anwendung"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <path d="M3.5 10.5 12 3.8l8.5 6.7v9a1 1 0 0 1-1 1h-5.2v-6.2H9.7v6.2H4.5a1 1 0 0 1-1-1z" />
+        </svg>
+      </a>
+    </nav>
+
+    @if (activePanel() === 'elements') {
+      <aside
+        id="element-catalog"
+        class="flex h-full w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 sm:w-72 xl:w-80"
+      >
+        <div class="shrink-0 border-b border-slate-800 bg-slate-900 px-5 pb-4 pt-5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-sm font-semibold text-white">Elemente</h1>
+              <p class="mt-1 text-xs text-slate-400">
+                Shared UI · {{ elements.length }} Komponenten
+              </p>
+            </div>
+            <button
+              type="button"
+              class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+              aria-label="Elemente schließen"
+              (click)="togglePanel('elements')"
+            >
+              ×
+            </button>
+          </div>
+          <label
+            class="mt-4 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-400 focus-within:border-indigo-400"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              aria-hidden="true"
+            >
+              <circle cx="10.8" cy="10.8" r="6.3" />
+              <path d="m15.5 15.5 4.2 4.2" />
+            </svg>
+            <input
+              class="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-500"
+              type="search"
+              placeholder="Element suchen"
+              aria-label="UI-Elemente suchen"
+              [value]="searchTerm()"
+              (input)="search($event)"
+            />
+          </label>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div class="grid grid-cols-2 gap-2 p-3">
+            @for (element of filteredElements(); track element.name) {
+              <button
+                type="button"
+                draggable="true"
+                class="group min-w-0 cursor-grab rounded-xl border border-slate-800 bg-slate-950/70 p-2 text-left transition hover:border-indigo-400/60 hover:bg-slate-800 active:cursor-grabbing"
+                [attr.aria-label]="
+                  element.title + ' auf die Anwendung ziehen oder zum Hinzufügen anklicken'
+                "
+                [disabled]="saveStatus() === 'loading'"
+                (dragstart)="startPaletteDrag($event, element)"
+                (click)="addElement(element)"
+              >
+                <span
+                  class="grid h-20 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 text-indigo-300 transition group-hover:from-indigo-950 group-hover:to-slate-900"
+                >
+                  <svg
+                    viewBox="0 0 64 48"
+                    class="h-12 w-16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    aria-hidden="true"
+                  >
+                    @switch (element.icon) {
+                      @case ('button') {
+                        <rect
+                          x="11"
+                          y="14"
+                          width="42"
+                          height="20"
+                          rx="6"
+                          fill="currentColor"
+                          fill-opacity=".18"
+                        />
+                        <path d="M23 24h18" />
+                      }
+                      @case ('card') {
+                        <rect
+                          x="12"
+                          y="7"
+                          width="40"
+                          height="34"
+                          rx="5"
+                          fill="currentColor"
+                          fill-opacity=".1"
+                        />
+                        <path d="M18 17h18M18 23h27M18 29h22M18 35h12" />
+                      }
+                      @case ('field') {
+                        <rect
+                          x="10"
+                          y="9"
+                          width="44"
+                          height="30"
+                          rx="4"
+                          fill="currentColor"
+                          fill-opacity=".08"
+                        />
+                        <path d="M16 18h18M16 28h32M19 25v6" />
+                      }
+                      @case ('choice') {
+                        <rect x="14" y="10" width="13" height="13" rx="3" />
+                        <path d="m17 16 3 3 6-7M32 16h17M32 32h17" />
+                        <circle cx="20.5" cy="32" r="6.5" />
+                      }
+                      @case ('feedback') {
+                        <rect
+                          x="10"
+                          y="11"
+                          width="44"
+                          height="26"
+                          rx="5"
+                          fill="currentColor"
+                          fill-opacity=".12"
+                        />
+                        <circle cx="20" cy="24" r="4" />
+                        <path d="M29 21h17M29 27h12" />
+                      }
+                      @case ('profile') {
+                        <circle cx="32" cy="17" r="8" fill="currentColor" fill-opacity=".2" />
+                        <path d="M15 42c1.5-8 7.8-12 17-12s15.5 4 17 12" />
+                      }
+                      @case ('navigation') {
+                        <rect x="9" y="10" width="46" height="28" rx="4" />
+                        <path d="M9 19h46M20 14.5h6M32 14.5h6M19 25h26M19 31h18" />
+                      }
+                      @case ('layout') {
+                        <rect x="11" y="8" width="42" height="32" rx="4" />
+                        <path d="M11 17h42M25 17v23" />
+                        <rect
+                          x="15"
+                          y="22"
+                          width="6"
+                          height="5"
+                          rx="1"
+                          fill="currentColor"
+                          fill-opacity=".3"
+                        />
+                        <path d="M30 23h17M30 29h17M30 35h11" />
+                      }
+                    }
+                  </svg>
+                </span>
+                <span class="mt-2 block truncate text-xs font-medium text-slate-100">{{
+                  element.title
+                }}</span>
+                <span class="mt-0.5 block truncate text-[10px] text-slate-500">{{
+                  element.description
+                }}</span>
+              </button>
+            } @empty {
+              <p class="col-span-2 px-2 py-8 text-center text-xs text-slate-400">
+                Keine Elemente gefunden.
+              </p>
+            }
+          </div>
+        </div>
+        <p class="shrink-0 border-t border-slate-800 px-4 py-3 text-[10px] text-slate-500">
+          Ziehe ein Element an die gewünschte Position auf der Anwendung.
+        </p>
+      </aside>
+    }
+
+    @if (activePanel() === 'schema') {
+      <aside
+        id="schema-panel"
+        class="flex h-full w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 sm:w-[min(42rem,calc(100vw-4.5rem))]"
+      >
+        <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4">
+          <div>
+            <h1 class="text-sm font-semibold text-white">application.schema.json</h1>
+            <p class="mt-1 text-[10px] text-slate-400">
+              MongoDB · {{ configuredElements().length }} Elemente
+            </p>
+          </div>
+          <button
+            type="button"
+            class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+            aria-label="Schema schließen"
+            (click)="togglePanel('schema')"
+          >
+            ×
+          </button>
+        </div>
+        <div class="flex min-h-0 flex-1 flex-col">
+          <div
+            class="flex h-10 shrink-0 items-center justify-between border-b border-slate-800 px-4"
+          >
+            <span
+              class="text-[10px]"
+              [class.text-emerald-400]="!schemaError()"
+              [class.text-rose-400]="schemaError()"
+              >{{ schemaError() || 'Schema-Editor' }}</span
+            >
+            <span
+              class="text-[10px]"
+              [class.text-emerald-400]="saveStatus() === 'saved'"
+              [class.text-amber-300]="saveStatus() === 'saving'"
+              [class.text-rose-300]="saveStatus() === 'error'"
+            >
+              {{
+                saveStatus() === 'saved'
+                  ? 'Gespeichert'
+                  : saveStatus() === 'saving'
+                    ? 'Speichert …'
+                    : saveStatus() === 'loading'
+                      ? 'Lädt …'
+                      : 'Speicherfehler'
+              }}
+            </span>
+          </div>
+          <label class="flex min-h-0 flex-1" for="schema-editor">
+            <span
+              class="hidden select-none overflow-hidden border-r border-slate-800 bg-slate-950/70 px-3 py-4 text-right font-mono text-xs leading-6 text-slate-600 sm:block"
+            >
+              @for (line of codeLines(); track line) {
+                {{ line }}<br />
+              }
+            </span>
+            <textarea
+              id="schema-editor"
+              class="min-h-0 w-full resize-none bg-slate-950 px-4 py-4 font-mono text-xs leading-6 text-indigo-100 outline-none selection:bg-indigo-500/30 disabled:opacity-50"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              aria-label="JSON Anwendungsschema bearbeiten"
+              [value]="schemaCode()"
+              [disabled]="saveStatus() === 'loading'"
+              (input)="updateCode($event)"
+            ></textarea>
+          </label>
+          @if (schemaError() || saveError()) {
+            <p
+              class="shrink-0 border-t border-rose-900/60 bg-rose-950/30 px-4 py-3 text-xs text-rose-300"
+              role="alert"
+            >
+              {{ schemaError() || saveError() }}
+            </p>
+          }
+          <div
+            class="flex h-10 shrink-0 items-center justify-between border-t border-slate-800 px-4"
+          >
+            <span class="text-[10px] text-slate-500">{{ codeLines().length }} Zeilen</span>
+            <button
+              type="button"
+              class="rounded-md bg-indigo-600 px-3 py-1.5 text-[10px] font-medium text-white hover:bg-indigo-500"
+              (click)="saveNow()"
+            >
+              Jetzt speichern
+            </button>
+          </div>
+        </div>
+      </aside>
+    }
+
+    @if (activePanel() === 'history') {
+      <aside
+        id="history-panel"
+        class="flex h-full w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 sm:w-72"
+      >
+        <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4">
+          <div>
+            <h1 class="text-sm font-semibold text-white">Änderungsverlauf</h1>
+            <p class="mt-1 text-[10px] text-slate-400">
+              Version {{ historyIndex() + 1 }} von {{ history().length }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+            aria-label="Verlauf schließen"
+            (click)="togglePanel('history')"
+          >
+            ×
+          </button>
+        </div>
+        <div class="flex shrink-0 gap-2 border-b border-slate-800 p-3">
+          <button
+            type="button"
+            class="flex-1 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+            [disabled]="!canUndo()"
+            (click)="undo()"
+          >
+            ← Zurück
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+            [disabled]="!canRedo()"
+            (click)="redo()"
+          >
+            Vorwärts →
+          </button>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto p-3">
+          @for (version of history(); track $index) {
+            <button
+              type="button"
+              class="mb-2 flex w-full items-center gap-3 rounded-lg border p-3 text-left"
+              [class.border-indigo-500]="historyIndex() === $index"
+              [class.bg-indigo-500/10]="historyIndex() === $index"
+              [class.border-slate-800]="historyIndex() !== $index"
+              (click)="restoreHistory($index)"
+            >
+              <span
+                class="grid size-7 shrink-0 place-items-center rounded-full bg-slate-800 font-mono text-[10px]"
+                >{{ $index + 1 }}</span
+              >
+              <span class="min-w-0 flex-1">
+                <span class="block text-xs font-medium text-slate-200">{{
+                  $index === 0 ? 'Aus MongoDB geladen' : 'Änderung'
+                }}</span>
+                <span class="mt-1 block truncate text-[10px] text-slate-500">{{
+                  historySummary(version)
+                }}</span>
+              </span>
+              @if (historyIndex() === $index) {
+                <span class="size-2 rounded-full bg-indigo-400"></span>
+              }
+            </button>
+          }
+        </div>
+      </aside>
+    }
+  </div>
+
+  <section
+    class="relative z-0 min-h-0 min-w-0 flex-1 overflow-hidden bg-white"
+    aria-label="Anwendung"
+  >
+    <elv-dynamic-renderer
+      class="absolute inset-0 block h-full w-full"
+      [schema]="previewSchema()"
+      (nodeDropped)="handleElementDrop($event)"
+      (nodeSelected)="selectNode($event)"
+    />
+  </section>
+
+  @if (selectedNode(); as node) {
+    <aside
+      class="absolute inset-y-0 right-0 z-20 flex w-[min(21rem,calc(100vw-4rem))] min-h-0 flex-col border-l border-slate-200 bg-white shadow-2xl"
+      aria-label="Element-Properties"
+    >
+      <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-4">
+        <div class="min-w-0">
+          <p class="text-[10px] uppercase tracking-wider text-slate-400">Properties</p>
+          <h2 class="truncate text-sm font-semibold text-slate-800">{{ titleFor(node) }}</h2>
+        </div>
+        <button
+          type="button"
+          class="grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"
+          aria-label="Properties schließen"
+          (click)="selectNode('')"
+        >
+          ×
+        </button>
+      </div>
+      <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+        <section class="space-y-3">
+          <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Position
+          </h3>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="space-y-1 text-xs text-slate-600"
+              >X
+              <input
+                type="number"
+                class="w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-xs outline-none focus:border-indigo-400"
+                [value]="selectedPosition().x"
+                (change)="updatePosition('x', $event)"
+              />
+            </label>
+            <label class="space-y-1 text-xs text-slate-600"
+              >Y
+              <input
+                type="number"
+                class="w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-xs outline-none focus:border-indigo-400"
+                [value]="selectedPosition().y"
+                (change)="updatePosition('y', $event)"
+              />
+            </label>
+          </div>
+          <p class="text-[10px] leading-4 text-slate-400">
+            Elemente lassen sich direkt in der Anwendung verschieben.
+          </p>
+        </section>
+
+        <section class="space-y-3">
+          <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Properties & Styles
+          </h3>
+          @for (entry of selectedEntries(); track entry.key) {
+            <label class="block space-y-1.5 text-xs text-slate-600">
+              <span class="font-medium">{{ entry.key }}</span>
+              @if (entryType(entry) === 'boolean') {
+                <select
+                  class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs outline-none focus:border-indigo-400"
+                  [value]="entry.value"
+                  (change)="updateProperty(entry.key, $event)"
+                >
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              } @else if (entryType(entry) === 'json') {
+                <textarea
+                  class="min-h-20 w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-[10px] outline-none focus:border-indigo-400"
+                  spellcheck="false"
+                  [value]="entryValue(entry)"
+                  (change)="updateProperty(entry.key, $event)"
+                ></textarea>
+              } @else {
+                <input
+                  [type]="entryType(entry)"
+                  class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs outline-none focus:border-indigo-400"
+                  [value]="entryValue(entry)"
+                  (change)="updateProperty(entry.key, $event)"
+                />
+              }
+            </label>
+          } @empty {
+            <p class="text-xs leading-5 text-slate-500">
+              Für dieses Element gibt es keine weiteren Properties.
+            </p>
+          }
+        </section>
+        @if (saveError()) {
+          <p class="rounded-lg bg-rose-50 p-3 text-xs leading-5 text-rose-700" role="alert">
+            {{ saveError() }}
+          </p>
+        }
+      </div>
+      <div class="shrink-0 border-t border-slate-200 p-3">
+        <button
+          type="button"
+          class="w-full rounded-lg border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
+          [disabled]="node.id === previewSchema().rootComponentId"
+          (click)="removeElement(node.id)"
+        >
+          Element entfernen
+        </button>
+      </div>
+    </aside>
+  }
+
+  <div
+    class="absolute right-4 top-4 z-10 flex max-w-[calc(100vw-6rem)] items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"
+  >
+    <span
+      class="size-2 shrink-0 rounded-full"
+      [class.bg-emerald-500]="saveStatus() === 'saved'"
+      [class.bg-amber-400]="saveStatus() === 'saving' || saveStatus() === 'loading'"
+      [class.bg-rose-500]="saveStatus() === 'error'"
+    ></span>
+    <span class="truncate text-[10px] text-slate-600">{{
+      saveStatus() === 'loading'
+        ? 'Lade MongoDB-Konfiguration …'
+        : saveStatus() === 'saving'
+          ? 'Speichert Änderungen …'
+          : saveStatus() === 'saved'
+            ? 'In MongoDB gespeichert'
+            : 'Speichern fehlgeschlagen'
+    }}</span>
+    @if (saveStatus() === 'error') {
+      <button
+        type="button"
+        class="shrink-0 text-[10px] font-medium text-indigo-600 hover:text-indigo-800"
+        (click)="loadError() ? retryLoad() : saveNow()"
+      >
+        Erneut versuchen
+      </button>
+    }
+  </div>
+
+  @if (loadError()) {
+    <div
+      class="absolute inset-x-16 top-16 z-10 mx-auto max-w-lg rounded-xl border border-rose-200 bg-white p-4 shadow-xl sm:inset-x-24"
+      role="alert"
+    >
+      <p class="text-sm font-semibold text-rose-800">
+        Gespeicherte Anwendung konnte nicht geladen werden
+      </p>
+      <p class="mt-1 text-xs leading-5 text-rose-700">{{ loadError() }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-medium text-white hover:bg-rose-800"
+        (click)="retryLoad()"
+      >
+        Erneut laden
+      </button>
+    </div>
+  }
+</main>

@@ -4,12 +4,14 @@ import {
   Component,
   ComponentRef,
   createComponent,
+  EventEmitter,
   EnvironmentInjector,
   ElementRef,
   inject,
   Input,
   OnChanges,
   OnDestroy,
+  Output,
   Type,
   ViewRef,
 } from '@angular/core';
@@ -21,6 +23,13 @@ interface RenderSession {
   componentRefs: ComponentRef<unknown>[];
 }
 
+export interface DynamicElementDrop {
+  x: number;
+  y: number;
+  nodeId?: string;
+  componentName?: string;
+}
+
 /**
  * Renders component, native-element and text nodes from a DynamicAppSchema.
  */
@@ -28,10 +37,13 @@ interface RenderSession {
   selector: 'elv-dynamic-renderer',
   standalone: true,
   template: '',
+  host: { class: 'block h-full min-h-full' },
 })
 export class DynamicRendererComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) schema!: DynamicAppSchema;
   @Input() componentId?: string;
+  @Output() readonly nodeDropped = new EventEmitter<DynamicElementDrop>();
+  @Output() readonly nodeSelected = new EventEmitter<string>();
 
   private readonly registry = inject(DYNAMIC_COMPONENT_REGISTRY);
   private readonly environmentInjector = inject(EnvironmentInjector);
@@ -87,7 +99,12 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
     const path = new Set(ancestors);
     path.add(node.id);
     const children: Node[] = [];
-    for (const childId of node.children ?? []) {
+    const childIds = [...(node.children ?? [])].sort((leftId, rightId) => {
+      const left = nodes.get(leftId)?.position?.order;
+      const right = nodes.get(rightId)?.position?.order;
+      return (left ?? Number.MAX_SAFE_INTEGER) - (right ?? Number.MAX_SAFE_INTEGER);
+    });
+    for (const childId of childIds) {
       const child = nodes.get(childId);
       if (!child) {
         console.warn(`[DynamicRenderer] No component with id "${childId}" in schema "${this.schema.id}"`);
@@ -117,6 +134,10 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
 
       const element = this.document.createElement(tagName);
       this.applyElementAttributes(element, node.attributes);
+      this.prepareNodeElement(element, node, ancestors.size === 0, ancestors.size === 1);
+      if (ancestors.size === 0) {
+        this.prepareApplicationRoot(element);
+      }
       element.append(...children);
       return element;
     }
@@ -134,6 +155,10 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
 
     const componentType: Type<unknown> = await loader();
     const hostElement = this.document.createElement('div');
+    this.prepareNodeElement(hostElement, node, ancestors.size === 0, ancestors.size === 1);
+    if (ancestors.size === 0) {
+      this.prepareApplicationRoot(hostElement);
+    }
     const componentRef = this.createComponent(componentType, hostElement, children);
     session.componentRefs.push(componentRef);
     session.views.push(componentRef.hostView);
@@ -151,6 +176,67 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
     componentRef.changeDetectorRef.detectChanges();
 
     return hostElement;
+  }
+
+  private prepareApplicationRoot(element: HTMLElement): void {
+    element.style.position = 'relative';
+    element.style.width = '100%';
+    element.style.minHeight = '100%';
+    element.addEventListener('dragover', (event) => event.preventDefault());
+    element.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const transfer = event.dataTransfer;
+      if (!transfer) {
+        return;
+      }
+
+      const bounds = element.getBoundingClientRect();
+      const nodeId = transfer.getData('application/x-elyvion-node') || undefined;
+      const componentName = transfer.getData('application/x-elyvion-component') || undefined;
+      if (!nodeId && !componentName) {
+        return;
+      }
+      this.nodeDropped.emit({
+        x: Math.max(0, Math.round(event.clientX - bounds.left)),
+        y: Math.max(0, Math.round(event.clientY - bounds.top)),
+        nodeId,
+        componentName,
+      });
+    });
+    element.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target instanceof Element) {
+        const node = target.closest<HTMLElement>('[data-elv-node-id]');
+        if (node?.dataset['elvNodeId']) {
+          this.nodeSelected.emit(node.dataset['elvNodeId']);
+        }
+      }
+    });
+  }
+
+  private prepareNodeElement(
+    element: HTMLElement,
+    node: DynamicComponentNode,
+    isApplicationRoot: boolean,
+    isDirectChild: boolean,
+  ): void {
+    element.dataset['elvNodeId'] = node.id;
+    if (!isApplicationRoot && isDirectChild) {
+      element.draggable = true;
+      element.style.cursor = 'move';
+      element.addEventListener('dragstart', (event) => {
+        event.dataTransfer?.setData('application/x-elyvion-node', node.id);
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+        }
+      });
+    }
+    if (node.position) {
+      element.style.position = 'absolute';
+      element.style.left = `${node.position.x}px`;
+      element.style.top = `${node.position.y}px`;
+      element.style.zIndex = String(node.position.zIndex ?? node.position.order ?? 1);
+    }
   }
 
   private createComponent(

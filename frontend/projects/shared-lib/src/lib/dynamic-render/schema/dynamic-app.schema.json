@@ -48,6 +48,11 @@
           "type": "string",
           "description": "Logical Angular component type name, resolved at runtime against the host app's component registry and lazily loaded (code-split) on first use."
         },
+        "type": {
+          "type": "string",
+          "enum": ["component", "element", "text"],
+          "description": "Node kind. Defaults to component when name is set, element when element is set, otherwise text."
+        },
         "element": {
           "type": "string",
           "description": "HTML tag name for an element node."
@@ -55,6 +60,18 @@
         "text": {
           "type": "string",
           "description": "Text content for a text node."
+        },
+        "position": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "zIndex": { "type": "number" },
+            "order": { "type": "number" }
+          },
+          "additionalProperties": false,
+          "description": "Absolute coordinates within the rendered application root and its stacking/order."
         },
         "attributes": {
           "type": "object",
@@ -73,7 +90,21 @@
           "description": "Ids of this node's children, rendered in order inside its HTML element or Angular component host.",
           "items": { "type": "string" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "component" } }, "required": ["type"] },
+          "then": { "required": ["name"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "element" } }, "required": ["type"] },
+          "then": { "required": ["element"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "text" } }, "required": ["type"] },
+          "then": { "required": ["text"] }
+        }
+      ]
     }
   }
 }

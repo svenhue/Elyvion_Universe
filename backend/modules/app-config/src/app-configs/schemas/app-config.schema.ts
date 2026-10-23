@@ -11,8 +11,20 @@ export class ComponentNode {
   @Prop({ required: true })
   id!: string;
 
-  @Prop({ required: true })
-  name!: string;
+  @Prop({ enum: ['component', 'element', 'text'] })
+  type?: 'component' | 'element' | 'text';
+
+  @Prop()
+  name?: string;
+
+  @Prop()
+  element?: string;
+
+  @Prop()
+  text?: string;
+
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  position?: { x: number; y: number; zIndex?: number; order?: number };
 
   @Prop({ type: MongooseSchema.Types.Mixed })
   attributes?: Record<string, unknown>;

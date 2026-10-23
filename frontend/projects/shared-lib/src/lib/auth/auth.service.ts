@@ -1,7 +1,17 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { firstValueFrom } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  finalize,
+  firstValueFrom,
+  map,
+  of,
+  shareReplay,
+  tap,
+  throwError,
+} from 'rxjs';
 import { ELYVION_AUTH_CONFIG } from './auth.config';
 import { decodeJwtPayload } from './jwt';
 import { generatePkcePair, generateRandomString } from './pkce';
@@ -24,6 +34,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly config = inject(ELYVION_AUTH_CONFIG);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private refreshRequest?: Observable<string>;
 
   readonly isAuthenticated = signal(this.isBrowser && !!tokenStore.accessToken);
   readonly claims = signal(this.readClaims());
@@ -95,6 +106,61 @@ export class AuthService {
 
   getAccessToken(): string | null {
     return this.isBrowser ? tokenStore.accessToken : null;
+  }
+
+  refreshAccessToken(): Observable<string | null> {
+    if (!this.isBrowser) {
+      return of(null);
+    }
+
+    if (this.refreshRequest) {
+      return this.refreshRequest;
+    }
+
+    const refreshToken = tokenStore.refreshToken;
+    if (!refreshToken) {
+      this.clearSession();
+      return of(null);
+    }
+
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: this.config.clientId,
+    });
+
+    const request = this.http
+      .post<TokenResponse>(`${this.config.issuer}/token`, body.toString(), {
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      })
+      .pipe(
+        tap((tokens) => {
+          if (typeof tokens.access_token !== 'string' || !tokens.access_token) {
+            throw new Error('Token refresh response does not contain an access token.');
+          }
+          tokenStore.setTokens(tokens);
+          this.isAuthenticated.set(true);
+          this.claims.set(this.readClaims());
+        }),
+        map((tokens) => tokens.access_token),
+        catchError((error: unknown) => {
+          this.clearSession();
+          return throwError(() => error);
+        }),
+        finalize(() => {
+          this.refreshRequest = undefined;
+        }),
+        shareReplay({ bufferSize: 1, refCount: false }),
+      );
+
+    this.refreshRequest = request;
+    return request;
+  }
+
+  private clearSession(): void {
+    tokenStore.clear();
+    this.isAuthenticated.set(false);
+    this.claims.set(null);
   }
 
   private readClaims(): Record<string, unknown> | null {

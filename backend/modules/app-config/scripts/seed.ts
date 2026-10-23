@@ -16,12 +16,9 @@ async function main() {
       components: [
         {
           id: 'root',
-          name: 'button',
-          attributes: {
-            label: 'Hallo Elyvion!',
-            variant: 'primary',
-            style: { margin: '2rem' },
-          },
+          type: 'element',
+          element: 'main',
+          attributes: { class: 'relative min-h-full w-full bg-white' },
           children: [],
         },
       ],

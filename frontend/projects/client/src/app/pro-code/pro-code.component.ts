@@ -1,0 +1,598 @@
+import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import {
+  ApiClientService,
+  AuthService,
+  DynamicAppSchema,
+  DynamicAppService,
+  DynamicComponentNode,
+  DynamicElementDrop,
+  DynamicRendererComponent,
+  ResponseEnvelope,
+} from '@elyvion/shared-lib';
+import { EMPTY, Subject, catchError, debounceTime, map, switchMap } from 'rxjs';
+import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
+
+const EMPTY_SCHEMA: DynamicAppSchema = {
+  id: 'default',
+  name: 'Default App',
+  version: '1.0.0',
+  rootComponentId: 'root',
+  components: [
+    {
+      id: 'root',
+      type: 'element',
+      element: 'main',
+      attributes: { class: 'relative min-h-full w-full bg-white' },
+      children: [],
+    },
+  ],
+};
+
+interface ConfiguredElement {
+  id: string;
+  name?: string;
+  element?: string;
+  position?: DynamicComponentNode['position'];
+}
+
+interface EditableEntry {
+  key: string;
+  value: unknown;
+}
+
+interface SaveRequest {
+  applicationId: string;
+  name: string;
+  version: string;
+  rootComponentId: string;
+  components: DynamicComponentNode[];
+}
+
+interface PreviewRequest {
+  code: string;
+  schema: DynamicAppSchema;
+}
+
+@Component({
+  selector: 'app-pro-code',
+  standalone: true,
+  imports: [DynamicRendererComponent, RouterLink],
+  templateUrl: './pro-code.component.html',
+})
+export class ProCodeComponent implements OnInit, OnDestroy {
+  readonly elements = UI_ELEMENT_CATALOG;
+  readonly activePanel = signal<'elements' | 'schema' | 'history' | null>(null);
+  readonly searchTerm = signal('');
+  readonly schemaCode = signal(JSON.stringify(EMPTY_SCHEMA, null, 2));
+  readonly schemaError = signal('');
+  readonly loadError = signal('');
+  readonly saveStatus = signal<'loading' | 'saving' | 'saved' | 'error'>('loading');
+  readonly saveError = signal('');
+  readonly configuredElements = signal<ConfiguredElement[]>([]);
+  readonly previewSchema = signal<DynamicAppSchema>(EMPTY_SCHEMA);
+  readonly selectedId = signal<string | null>(null);
+  readonly history = signal<string[]>([JSON.stringify(EMPTY_SCHEMA)]);
+  readonly historyIndex = signal(0);
+  readonly codeLines = computed(() => this.schemaCode().split('\n').map((_, index) => index + 1));
+  readonly canUndo = computed(() => this.historyIndex() > 0);
+  readonly canRedo = computed(() => this.historyIndex() < this.history().length - 1);
+  readonly filteredElements = computed(() => {
+    const query = this.searchTerm().trim().toLocaleLowerCase('de');
+    return query
+      ? this.elements.filter((element) =>
+          `${element.title} ${element.name} ${element.description}`.toLocaleLowerCase('de').includes(query),
+        )
+      : this.elements;
+  });
+  readonly selectedNode = computed(
+    () => this.previewSchema().components.find((node) => node.id === this.selectedId()) ?? null,
+  );
+  readonly selectedEntries = computed<EditableEntry[]>(() => {
+    const node = this.selectedNode();
+    if (!node) {
+      return [];
+    }
+    const properties = node.attributes?.['properties'];
+    const values = properties && typeof properties === 'object' && !Array.isArray(properties)
+      ? properties as Record<string, unknown>
+      : node.attributes ?? {};
+    return Object.entries(values)
+      .map(([key, value]) => ({ key, value }));
+  });
+  readonly selectedPosition = computed(() => this.selectedNode()?.position ?? { x: 0, y: 0 });
+
+  private readonly auth = inject(AuthService);
+  private readonly dynamicAppService = inject(DynamicAppService);
+  private readonly api = inject(ApiClientService);
+  private readonly saveRequests = new Subject<DynamicAppSchema>();
+  private readonly historyRequests = new Subject<string>();
+  private readonly previewRequests = new Subject<PreviewRequest>();
+
+  constructor() {
+    this.syncConfiguredElements(EMPTY_SCHEMA);
+    this.previewRequests
+      .pipe(debounceTime(150))
+      .subscribe(({ code, schema }) => {
+        if (this.schemaCode() === code) {
+          this.previewSchema.set(schema);
+        }
+      });
+    this.historyRequests
+      .pipe(debounceTime(400))
+      .subscribe((serialized) => {
+        if (this.schemaCode() === serialized) {
+          this.recordHistoryCode(serialized);
+        }
+      });
+    this.saveRequests
+      .pipe(
+        debounceTime(600),
+        switchMap((schema) => {
+          this.saveStatus.set('saving');
+          this.saveError.set('');
+          const body: SaveRequest = {
+            applicationId: 'default',
+            name: schema.name,
+            version: schema.version,
+            rootComponentId: schema.rootComponentId,
+            components: schema.components,
+          };
+          return this.api.put<DynamicAppSchema>('app-config', '/configs/default', body).pipe(
+            map((response: ResponseEnvelope<DynamicAppSchema>) => response.data),
+            catchError((error: unknown) => {
+              this.saveStatus.set('error');
+              this.saveError.set(errorMessage(error, 'Die Anwendung konnte nicht in MongoDB gespeichert werden.'));
+              return EMPTY;
+            }),
+          );
+        }),
+      )
+      .subscribe(() => this.saveStatus.set('saved'));
+  }
+
+  ngOnInit(): void {
+    const subject = this.auth.claims()?.['sub'];
+    const userId = typeof subject === 'string' && subject.length ? subject : 'anonymous';
+    this.dynamicAppService.loadApplication({ applicationId: 'default', userId }).subscribe({
+      next: (schema) => {
+        const normalized = normalizeSchema(schema);
+        this.loadError.set('');
+        this.loadSchema(normalized);
+        this.saveStatus.set('saved');
+      },
+      error: (error: unknown) => {
+        this.saveStatus.set('error');
+        this.loadError.set(errorMessage(error, 'Die gespeicherte Anwendung konnte nicht geladen werden.'));
+      },
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.saveRequests.complete();
+    this.historyRequests.complete();
+    this.previewRequests.complete();
+  }
+
+  togglePanel(panel: 'elements' | 'schema' | 'history'): void {
+    this.activePanel.update((active) => active === panel ? null : panel);
+  }
+
+  search(event: Event): void {
+    if (event.target instanceof HTMLInputElement) {
+      this.searchTerm.set(event.target.value);
+    }
+  }
+
+  startPaletteDrag(event: DragEvent, element: UiElementDefinition): void {
+    event.dataTransfer?.setData('application/x-elyvion-component', element.name);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'copy';
+    }
+  }
+
+  handleElementDrop(drop: DynamicElementDrop): void {
+    if (this.saveStatus() === 'loading') {
+      return;
+    }
+    const schema = this.parseSchema();
+    if (!schema) {
+      return;
+    }
+
+    if (drop.nodeId) {
+      const node = schema.components.find((candidate) => candidate.id === drop.nodeId);
+      if (!node || node.id === schema.rootComponentId) {
+        return;
+      }
+      node.position = { ...node.position, x: drop.x, y: drop.y };
+      this.selectedId.set(node.id);
+      this.writeSchema(schema);
+      return;
+    }
+
+    const definition = this.elements.find((element) => element.name === drop.componentName);
+    if (!definition) {
+      return;
+    }
+    this.insertElement(schema, definition, drop.x, drop.y);
+  }
+
+  addElement(element: UiElementDefinition): void {
+    if (this.saveStatus() === 'loading') {
+      return;
+    }
+    const schema = this.parseSchema();
+    if (!schema) {
+      return;
+    }
+    this.insertElement(schema, element, 144, 96);
+  }
+
+  selectNode(id: string): void {
+    this.selectedId.set(id);
+  }
+
+  removeElement(id: string): void {
+    if (id === this.previewSchema().rootComponentId) {
+      return;
+    }
+    const schema = this.parseSchema();
+    if (!schema) {
+      return;
+    }
+    const descendants = new Set<string>([id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const node of schema.components) {
+        if (descendants.has(node.id)) {
+          for (const childId of node.children ?? []) {
+            if (!descendants.has(childId)) {
+              descendants.add(childId);
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    schema.components = schema.components.filter((node) => !descendants.has(node.id));
+    for (const node of schema.components) {
+      node.children = node.children?.filter((childId) => !descendants.has(childId));
+    }
+    this.selectedId.set(null);
+    this.writeSchema(schema);
+  }
+
+  updateCode(event: Event): void {
+    if (!(event.target instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    const code = event.target.value;
+    this.schemaCode.set(code);
+    this.validateSchema(code);
+  }
+
+  updatePosition(axis: 'x' | 'y', event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    this.updateSelectedNode((node) => {
+      node.position = {
+        x: node.position?.x ?? 0,
+        y: node.position?.y ?? 0,
+        ...node.position,
+        [axis]: target.valueAsNumber || 0,
+      };
+    });
+  }
+
+  updateProperty(key: string, event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const entry = this.selectedEntries().find((candidate) => candidate.key === key);
+    if (!entry) {
+      return;
+    }
+    let value: unknown = target.value;
+    if (typeof entry.value === 'number' && target instanceof HTMLInputElement) {
+      if (target.value !== '' && !Number.isFinite(target.valueAsNumber)) {
+        this.schemaError.set(`„${key}“ muss eine gültige Zahl sein.`);
+        return;
+      }
+      value = target.value === '' ? 0 : target.valueAsNumber;
+    } else if (typeof entry.value === 'boolean') {
+      value = target.value === 'true';
+    } else if (entry.value && typeof entry.value === 'object' && target instanceof HTMLTextAreaElement) {
+      try {
+        value = JSON.parse(target.value) as unknown;
+      } catch {
+        this.schemaError.set(`„${key}“ muss gültiges JSON enthalten.`);
+        return;
+      }
+    }
+    this.schemaError.set('');
+    this.updateSelectedNode((node) => {
+      const properties = node.attributes?.['properties'];
+      if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+        const values = { ...properties as Record<string, unknown>, [key]: value };
+        node.attributes = { ...node.attributes, properties: values };
+      } else {
+        node.attributes = { ...node.attributes, [key]: value };
+      }
+    });
+  }
+
+  undo(): void {
+    if (!this.canUndo()) {
+      return;
+    }
+    this.applyHistory(this.historyIndex() - 1);
+  }
+
+  redo(): void {
+    if (!this.canRedo()) {
+      return;
+    }
+    this.applyHistory(this.historyIndex() + 1);
+  }
+
+  restoreHistory(index: number): void {
+    if (index !== this.historyIndex()) {
+      this.applyHistory(index);
+    }
+  }
+
+  historySummary(snapshot: string): string {
+    try {
+      const schema: unknown = JSON.parse(snapshot);
+      return isDynamicAppSchema(schema)
+        ? `${schema.components.length} Elemente · ${schema.name}`
+        : 'Ungültiger Verlaufseintrag';
+    } catch {
+      return 'Ungültiger Verlaufseintrag';
+    }
+  }
+
+  retryLoad(): void {
+    this.loadError.set('');
+    this.saveStatus.set('loading');
+    this.ngOnInit();
+  }
+
+  titleFor(node: ConfiguredElement | DynamicComponentNode | null): string {
+    if (!node) {
+      return 'Element';
+    }
+    return this.elements.find((element) => element.name === node.name)?.title ?? node.element ?? node.name ?? 'Text';
+  }
+
+  entryValue(entry: EditableEntry): string {
+    return entry.value && typeof entry.value === 'object'
+      ? JSON.stringify(entry.value, null, 2)
+      : String(entry.value ?? '');
+  }
+
+  entryType(entry: EditableEntry): string {
+    if (typeof entry.value === 'boolean') {
+      return 'boolean';
+    }
+    if (typeof entry.value === 'number') {
+      return 'number';
+    }
+    if (entry.value && typeof entry.value === 'object') {
+      return 'json';
+    }
+    return 'text';
+  }
+
+  saveNow(): void {
+    const schema = this.parseSchema();
+    if (schema) {
+      this.saveRequests.next(schema);
+    }
+  }
+
+  private insertElement(schema: DynamicAppSchema, element: UiElementDefinition, x: number, y: number): void {
+    const root = schema.components.find((node) => node.id === schema.rootComponentId);
+    if (!root) {
+      this.schemaError.set('Das rootComponentId verweist auf kein vorhandenes Schema-Element.');
+      return;
+    }
+    const id = `${element.name}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const order = Math.max(0, ...schema.components.map((node) => node.position?.order ?? 0)) + 1;
+    schema.components.push({
+      id,
+      type: 'component',
+      name: element.name,
+      attributes: { properties: defaultProperties(element.name) },
+      position: { x, y, order, zIndex: order },
+    });
+    root.children = [...(root.children ?? []), id];
+    this.selectedId.set(id);
+    this.writeSchema(schema);
+  }
+
+  private updateSelectedNode(update: (node: DynamicComponentNode) => void): void {
+    const id = this.selectedId();
+    if (!id) {
+      return;
+    }
+    const schema = this.parseSchema();
+    const node = schema?.components.find((candidate) => candidate.id === id);
+    if (!schema || !node) {
+      return;
+    }
+    update(node);
+    this.writeSchema(schema);
+  }
+
+  private loadSchema(schema: DynamicAppSchema): void {
+    const code = JSON.stringify(schema, null, 2);
+    this.schemaCode.set(code);
+    this.previewSchema.set(schema);
+    this.schemaError.set('');
+    this.syncConfiguredElements(schema);
+    this.history.set([code]);
+    this.historyIndex.set(0);
+    this.selectedId.set(null);
+  }
+
+  private parseSchema(): DynamicAppSchema | null {
+    try {
+      const parsed: unknown = JSON.parse(this.schemaCode());
+      if (!isDynamicAppSchema(parsed)) {
+        this.schemaError.set('Das JSON muss id, name, version, components und eine gültige rootComponentId enthalten.');
+        return null;
+      }
+      this.schemaError.set('');
+      return parsed;
+    } catch {
+      this.schemaError.set('Das JSON ist syntaktisch ungültig. Bitte korrigiere den Code, bevor du Elemente änderst.');
+      return null;
+    }
+  }
+
+  private validateSchema(code: string): void {
+    try {
+      const parsed: unknown = JSON.parse(code);
+      if (!isDynamicAppSchema(parsed)) {
+        this.schemaError.set('Das JSON muss id, name, version, components und eine gültige rootComponentId enthalten.');
+        return;
+      }
+      this.schemaError.set('');
+      this.previewRequests.next({ code, schema: parsed });
+      this.syncConfiguredElements(parsed);
+      this.selectedId.update((id) => id && parsed.components.some((node) => node.id === id) ? id : null);
+      this.historyRequests.next(JSON.stringify(parsed, null, 2));
+      this.saveRequests.next(parsed);
+    } catch {
+      this.schemaError.set('Das JSON ist syntaktisch ungültig.');
+    }
+  }
+
+  private writeSchema(schema: DynamicAppSchema): void {
+    const code = JSON.stringify(schema, null, 2);
+    this.schemaCode.set(code);
+    this.schemaError.set('');
+    this.previewSchema.set(schema);
+    this.syncConfiguredElements(schema);
+    this.recordHistory(schema);
+    this.saveRequests.next(schema);
+  }
+
+  private recordHistory(schema: DynamicAppSchema): void {
+    this.recordHistoryCode(JSON.stringify(schema, null, 2));
+  }
+
+  private recordHistoryCode(serialized: string): void {
+    const current = this.history();
+    if (current[this.historyIndex()] === serialized) {
+      return;
+    }
+    const next = [...current.slice(0, this.historyIndex() + 1), serialized];
+    this.history.set(next);
+    this.historyIndex.set(next.length - 1);
+  }
+
+  private applyHistory(index: number): void {
+    const serialized = this.history()[index];
+    const schema: unknown = JSON.parse(serialized);
+    if (!isDynamicAppSchema(schema)) {
+      this.schemaError.set('Der gespeicherte Verlaufseintrag enthält kein gültiges Anwendungsschema.');
+      return;
+    }
+    this.historyIndex.set(index);
+    this.schemaCode.set(serialized);
+    this.previewSchema.set(schema);
+    this.schemaError.set('');
+    this.syncConfiguredElements(schema);
+    this.saveRequests.next(schema);
+  }
+
+  private syncConfiguredElements(schema: DynamicAppSchema): void {
+    this.configuredElements.set(
+      schema.components
+        .filter((node) => node.id !== schema.rootComponentId)
+        .map((node) => ({ id: node.id, name: node.name, element: node.element, position: node.position })),
+    );
+  }
+}
+
+function normalizeSchema(schema: DynamicAppSchema): DynamicAppSchema {
+  const backendSchema = schema as DynamicAppSchema & { applicationId?: string };
+  return {
+    ...backendSchema,
+    id: backendSchema.id || backendSchema.applicationId || 'default',
+    components: backendSchema.components.map((node) => ({
+      ...node,
+      type: node.type ?? (node.name ? 'component' : node.element ? 'element' : 'text'),
+    })),
+  };
+}
+
+function isDynamicAppSchema(value: unknown): value is DynamicAppSchema {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('id' in value) ||
+    typeof value.id !== 'string' ||
+    !('name' in value) ||
+    typeof value.name !== 'string' ||
+    !('version' in value) ||
+    typeof value.version !== 'string' ||
+    !('rootComponentId' in value) ||
+    typeof value.rootComponentId !== 'string' ||
+    !('components' in value) ||
+    !Array.isArray(value.components)
+  ) {
+    return false;
+  }
+  return value.components.every(
+    (node: unknown) =>
+      typeof node === 'object' &&
+      node !== null &&
+      'id' in node &&
+      typeof node.id === 'string' &&
+      (!('type' in node) || ['component', 'element', 'text'].includes(String(node.type))) &&
+      (!('children' in node) || (Array.isArray(node.children) && node.children.every((id) => typeof id === 'string'))),
+  ) && value.components.some((node: DynamicComponentNode) => node.id === value.rootComponentId);
+}
+
+function defaultProperties(name: string): Record<string, unknown> {
+  const defaults: Record<string, Record<string, unknown>> = {
+    button: { label: 'Button', variant: 'primary', className: 'rounded-lg bg-indigo-600 px-4 py-2 text-white', styles: {} },
+    card: { title: 'Card', className: 'rounded-xl border border-slate-200 bg-white p-5', styles: {} },
+    'text-input': { label: 'Text Input', placeholder: 'Enter text', className: 'w-64', styles: {} },
+    textarea: { label: 'Textarea', placeholder: 'Enter text', className: 'w-64', styles: {} },
+    checkbox: { label: 'Checkbox', className: '', styles: {} },
+    select: { label: 'Select', placeholder: 'Choose an option', options: [], className: 'w-48', styles: {} },
+    toggle: { label: 'Toggle', className: '', styles: {} },
+    slider: { min: 0, max: 100, value: 50, className: 'w-48', styles: {} },
+    badge: { label: 'Badge', tone: 'neutral', className: '', styles: {} },
+    alert: { message: 'Alert message', tone: 'info', className: 'w-80', styles: {} },
+    avatar: { initials: 'A', className: '', styles: {} },
+    spinner: { label: 'Loading', className: '', styles: {} },
+    progress: { value: 60, label: 'Progress', className: 'w-64', styles: {} },
+    tooltip: { text: 'Tooltip', className: '', styles: {} },
+    modal: { title: 'Dialog', className: '', styles: {} },
+    tabs: { items: [{ label: 'Tab 1', value: 'tab-1' }, { label: 'Tab 2', value: 'tab-2' }], className: '', styles: {} },
+    accordion: { title: 'Accordion', className: 'w-80', styles: {} },
+    dropdown: { label: 'Dropdown', options: [], className: '', styles: {} },
+    pagination: { pageCount: 5, className: '', styles: {} },
+    divider: { className: 'w-64', styles: {} },
+    skeleton: { width: '12rem', height: '1rem', className: '', styles: {} },
+    'form-field': { label: 'Form Field', hint: 'Enter a value', className: 'w-64', styles: {} },
+  };
+  return defaults[name] ?? {};
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return `${fallback} ${error.message}`;
+  }
+  return fallback;
+}

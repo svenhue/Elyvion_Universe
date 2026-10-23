@@ -19,6 +19,13 @@ export interface DynamicComponentNode {
   element?: string;
   /** Text content, required when `type` is `text`. */
   text?: string;
+  /** Absolute coordinates within the rendered application root. */
+  position?: {
+    x: number;
+    y: number;
+    zIndex?: number;
+    order?: number;
+  };
   /**
    * Arbitrary attributes for this instance. By convention:
    * - `attributes.style` is a CSS-property-name → value map applied to the

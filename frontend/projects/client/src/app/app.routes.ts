@@ -9,6 +9,10 @@ export const routes: Routes = [
   { path: 'auth/callback', component: AuthCallbackComponent },
   ...withElyvionAuthShell([
     { path: '', component: HomeComponent },
+    {
+      path: 'pro-code',
+      loadComponent: () => import('./pro-code/pro-code.component').then((module) => module.ProCodeComponent),
+    },
     { path: 'admin', children: elvAdminRoutes },
   ]),
 ];
