@@ -21,31 +21,44 @@
     },
     "rootComponentId": {
       "type": "string",
-      "description": "Id of the component node in `components` to start rendering from."
+      "description": "Id of the node in `components` to start rendering from."
     },
     "components": {
       "type": "array",
-      "description": "Flat list of every component instance in the application. Hierarchy is expressed via each node's `children` (a list of ids), not by nesting objects.",
+      "description": "Flat list of every component, HTML element, or text node in the application. Hierarchy is expressed via each node's `children` (a list of ids), not by nesting objects.",
       "items": { "$ref": "#/$defs/component" }
     }
   },
   "$defs": {
     "component": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": ["id"],
       "additionalProperties": false,
       "properties": {
         "id": {
           "type": "string",
           "description": "Unique id of this component instance within the schema."
         },
+        "type": {
+          "type": "string",
+          "enum": ["component", "element", "text"],
+          "description": "Node kind. Defaults to component when name is set, element when element is set, and text otherwise."
+        },
         "name": {
           "type": "string",
-          "description": "Logical component type name, resolved at runtime against the host app's component registry and lazily loaded (code-split) on first use."
+          "description": "Logical Angular component type name, resolved at runtime against the host app's component registry and lazily loaded (code-split) on first use."
+        },
+        "element": {
+          "type": "string",
+          "description": "HTML tag name for an element node."
+        },
+        "text": {
+          "type": "string",
+          "description": "Text content for a text node."
         },
         "attributes": {
           "type": "object",
-          "description": "Arbitrary attributes for this instance. The reserved key `style` is applied to the host element's CSS; every other key becomes a component @Input().",
+          "description": "Attributes for this instance. Element attributes are set on native HTML elements; component attributes become Angular @Inputs(), except `style` and `class`, which are applied to the host element.",
           "properties": {
             "style": {
               "type": "object",
@@ -57,7 +70,7 @@
         },
         "children": {
           "type": "array",
-          "description": "Ids of this node's children, rendered in order inside the renderer's own container.",
+          "description": "Ids of this node's children, rendered in order inside its HTML element or Angular component host.",
           "items": { "type": "string" }
         }
       }

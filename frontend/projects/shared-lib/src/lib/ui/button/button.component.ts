@@ -1,19 +1,31 @@
+import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { ElvUiProperties } from '../ui-properties';
+import { ElvStatefulUiComponent } from '../stateful-ui-component';
 
 export type ElvButtonVariant = 'primary' | 'secondary' | 'ghost';
+
+export interface ElvButtonProperties extends ElvUiProperties {
+  variant?: ElvButtonVariant;
+  disabled?: boolean;
+  type?: 'button' | 'submit';
+  label?: string;
+}
 
 @Component({
   selector: 'elv-button',
   standalone: true,
+  imports: [CommonModule],
   template: `
     <button
-      [class]="'elv-button elv-button--' + variant"
-      [disabled]="disabled"
-      [type]="type"
+      [class]="'elv-button elv-button--' + (properties.variant ?? variant) + ' ' + (properties.className ?? '')"
+      [ngStyle]="properties.styles"
+      [disabled]="properties.disabled ?? disabled"
+      [type]="properties.type ?? type"
       (click)="pressed.emit()"
     >
-      @if (label) {
-        {{ label }}
+      @if (properties.label ?? label) {
+        {{ properties.label ?? label }}
       } @else {
         <ng-content />
       }
@@ -53,7 +65,8 @@ export type ElvButtonVariant = 'primary' | 'secondary' | 'ghost';
     `,
   ],
 })
-export class ElvButtonComponent {
+export class ElvButtonComponent extends ElvStatefulUiComponent {
+  @Input() properties: ElvButtonProperties = {};
   @Input() variant: ElvButtonVariant = 'primary';
   @Input() disabled = false;
   @Input() type: 'button' | 'submit' = 'button';

@@ -1,1 +1,8 @@
-/* You can add global styles to this file, and also import other style files */
+@import "tailwindcss";
+
+@source "../";
+@source "../../shared-lib/src";
+@source inline("{bg,text,border}-{red,blue,green,indigo,slate,gray}-{50,100,200,300,400,500,600,700,800,900,950}");
+@source inline("{bg,text}-{white,black,transparent,current}");
+@source inline("{p,px,py,pt,pr,pb,pl,m,mx,my,mt,mr,mb,ml,gap}-{0,1,2,3,4,5,6,8,10,12,16,20,24,32,auto}");
+@source inline("hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 {block,inline,inline-block,flex,inline-flex,grid,hidden,absolute,relative,fixed,sticky,items-center,items-start,items-end,justify-center,justify-between,justify-start,justify-end,flex-col,flex-row,flex-wrap,w-full,h-full,min-h-screen,rounded,rounded-md,rounded-lg,rounded-xl,rounded-full,shadow,shadow-md,shadow-lg,font-sans,font-medium,font-semibold,font-bold,text-xs,text-sm,text-base,text-lg,text-xl,text-2xl,text-3xl,text-center,text-left,underline,no-underline,opacity-0,opacity-50,opacity-100,cursor-pointer,cursor-not-allowed,overflow-hidden,overflow-auto,whitespace-nowrap,transition,transition-colors,duration-150,duration-300}");

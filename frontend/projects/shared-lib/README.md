@@ -26,6 +26,56 @@ ng build shared-lib
 
 This command will compile your project, and the build artifacts will be placed in the `dist/` directory.
 
+## Reusable UI components
+
+The library exports standalone components for buttons, cards, text inputs, textareas,
+checkboxes, selects, toggles, sliders, badges, alerts, avatars, spinners, progress bars,
+tooltips, modals, tabs, accordions, dropdowns, pagination, dividers, skeletons, and form
+fields. Every component accepts a typed `properties` input; its interface extends
+`ElvUiProperties`, which provides `className` and a `styles` map.
+
+```html
+<elv-text-input
+  componentId="profile-name"
+  [properties]="{
+    label: 'Name',
+    placeholder: 'Enter your name',
+    styles: { 'max-width': '24rem' }
+  }"
+/>
+```
+
+Interactive components keep their state on the component instance. Inject the
+root-provided `ElvUiStateService` to update or observe state by component ID:
+
+```ts
+this.uiState.setState('profile-name', { key: 'value', value: 'Ada' });
+this.uiState.setState('profile-name', {
+  key: 'class',
+  value: 'rounded-lg bg-indigo-600 px-4 py-2 text-white',
+});
+this.uiState.stateChanges$.subscribe(({ componentId, state }) => {
+  // React to state updates from components or other callers.
+});
+```
+
+Every UI component accepts a `componentId`; `key: 'class'` applies its string value to
+the Angular component host's `class` attribute. State is published to subscribers for
+that ID only, while `stateChanges$` remains available for observing all updates.
+Built-in controls use the `value` key for their internal state (for example, a text value,
+boolean checkbox/toggle value, or numeric slider/page value).
+
+The client app includes Tailwind CSS and scans both client and shared-lib sources. Tailwind
+generates CSS at build time, so utility classes coming from runtime data must be included
+in the app's `@source inline(...)` safelist in
+`projects/client/src/styles.css`; the default file includes common colors, spacing, and
+layout utilities.
+
+The dynamic renderer can render registered Angular components as well as native HTML and
+text nodes. For example, a native node can use `{ "id": "heading", "type": "element",
+"element": "h1", "attributes": { "class": "text-2xl font-bold" }, "children": ["copy"] }`,
+where `copy` is a text node ID.
+
 ### Publishing the Library
 
 Once the project is built, you can publish your library by following these steps:
