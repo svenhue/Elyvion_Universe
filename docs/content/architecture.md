@@ -38,6 +38,7 @@ Vollständiger OpenID-Connect-Provider (`oidc-provider`), kein Eigenbau von Kryp
 - Authorization Code Flow **mit erzwungenem PKCE** (`pkce.required`)
 - Refresh Token Rotation, Token Revocation, Introspection
 - Redirect-URIs sind pro Client explizit als Allowlist registriert (`src/oidc/clients.ts`) – nicht verhandelbar zur Laufzeit
+- Access Tokens sind **selbstständige JWTs** (RFC 9068, `at+jwt`) statt opaker Referenz-Tokens – über ein Resource Indicator (RFC 8707) mit fester Audience `API_AUDIENCE` (Default `elyvion:api`), die Gateway und Module beim Verifizieren prüfen (`verifyBearerToken(..., audience)`)
 
 Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`).
 

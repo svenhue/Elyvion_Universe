@@ -4,6 +4,14 @@ import { clients } from './clients';
 const prisma = new PrismaClient();
 
 /**
+ * Single audience for every resource (Gateway + business modules) on this
+ * platform. Declaring it as the default resource indicator (RFC 8707) is
+ * what makes oidc-provider issue a JWT access token instead of its default
+ * opaque, userinfo-only one — see features.resourceIndicators below.
+ */
+const API_AUDIENCE = process.env.API_AUDIENCE ?? 'elyvion:api';
+
+/**
  * oidc-provider (certified OpenID Connect Provider implementation) gives us
  * discovery, JWKS, Authorization Code + PKCE, refresh token rotation and
  * token revocation/introspection for free instead of hand-rolling crypto.
@@ -26,7 +34,20 @@ export async function createOidcProvider(issuerUrl: string) {
       devInteractions: { enabled: false },
       revocation: { enabled: true },
       introspection: { enabled: true },
-      resourceIndicators: { enabled: false },
+      // Resource Indicators (RFC 8707) is oidc-provider's mechanism for
+      // issuing self-contained JWT access tokens instead of its default
+      // opaque, userinfo-only ones — required so the Gateway and any
+      // module can verify tokens locally against JWKS.
+      resourceIndicators: {
+        enabled: true,
+        defaultResource: () => API_AUDIENCE,
+        useGrantedResource: () => true,
+        getResourceServerInfo: () => ({
+          scope: 'openid profile email offline_access',
+          accessTokenFormat: 'jwt',
+          jwt: { sign: { alg: 'RS256' } },
+        }),
+      },
     },
     ttl: {
       AccessToken: 60 * 60,

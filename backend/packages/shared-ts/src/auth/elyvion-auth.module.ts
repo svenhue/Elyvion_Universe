@@ -5,6 +5,8 @@ export const JWT_AUTH_GUARD = 'ELYVION_JWT_AUTH_GUARD';
 
 export interface ElyvionAuthModuleOptions {
   issuerUrl: string;
+  /** Expected `aud` claim — matches API_AUDIENCE configured in modules/auth. */
+  audience?: string;
 }
 
 /**
@@ -21,7 +23,7 @@ export class ElyvionAuthModule {
       providers: [
         {
           provide: JWT_AUTH_GUARD,
-          useValue: new JwtAuthGuard(options.issuerUrl),
+          useValue: new JwtAuthGuard(options.issuerUrl, options.audience),
         },
       ],
       exports: [JWT_AUTH_GUARD],

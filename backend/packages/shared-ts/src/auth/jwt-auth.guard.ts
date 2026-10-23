@@ -18,12 +18,19 @@ export interface AuthenticatedRequest extends Request {
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly issuerUrl: string) {}
+  constructor(
+    private readonly issuerUrl: string,
+    private readonly expectedAudience?: string,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     try {
-      request.user = await verifyBearerToken(request.headers.authorization, this.issuerUrl);
+      request.user = await verifyBearerToken(
+        request.headers.authorization,
+        this.issuerUrl,
+        this.expectedAudience,
+      );
       return true;
     } catch {
       throw new UnauthorizedException('Invalid or expired token');

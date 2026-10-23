@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ElyvionExceptionFilter, registerModule } from '@elyvion/shared';
+import * as express from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { RegistryCacheService } from './registry/registry-cache.service';
@@ -10,6 +11,7 @@ async function bootstrap() {
   const baseUrl = process.env.MODULE_BASE_URL ?? `http://localhost:${port}`;
   const registryUrl = process.env.REGISTRY_URL ?? 'http://localhost:3010';
   const authIssuerUrl = process.env.AUTH_ISSUER_URL ?? 'http://localhost:3011';
+  const apiAudience = process.env.API_AUDIENCE ?? 'elyvion:api';
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
@@ -17,7 +19,10 @@ async function bootstrap() {
   app.enableCors();
 
   const registryCache = app.get(RegistryCacheService);
-  app.use('/api', createProxyMiddleware(registryCache, authIssuerUrl));
+  // Our own body parser, scoped to /api — don't rely on Nest's own
+  // (platform-express) body-parser having already run for raw app.use()
+  // middleware registered this early in the bootstrap sequence.
+  app.use('/api', express.json(), createProxyMiddleware(registryCache, authIssuerUrl, apiAudience));
 
   await app.listen(port);
   console.log(`[gateway] listening on :${port}`);

@@ -19,9 +19,19 @@ async function bootstrap() {
   app.useGlobalFilters(new ElyvionExceptionFilter());
   app.enableCors();
 
-  // oidc-provider owns /auth, /token, /jwks, /userinfo, /.well-known/openid-configuration, etc.
-  // Our Nest controllers own /health and /interaction/*, which don't overlap.
-  app.use(provider.callback());
+  // provider.callback() is a Koa app under the hood: it never calls
+  // next(), it always writes *some* response (including a 400 for a path
+  // it doesn't recognize) — so it can't just be appended after Nest's own
+  // routes and rely on "falls through if unmatched". Instead we only
+  // delegate to it for paths our own Nest controllers don't own
+  // (/health, /interaction/*); everything else — /auth, /token, /jwks,
+  // /userinfo, /.well-known/*, etc. — goes to oidc-provider.
+  const NEST_OWNED_PATHS = ['/health', '/interaction'];
+  app.use((req, res, next) => {
+    const ownedByNest = NEST_OWNED_PATHS.some((p) => req.path === p || req.path.startsWith(`${p}/`));
+    if (ownedByNest) return next();
+    return provider.callback()(req, res, next);
+  });
 
   await app.listen(port);
   console.log(`[auth] listening on :${port}`);

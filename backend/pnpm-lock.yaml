@@ -156,6 +156,9 @@ importers:
       axios:
         specifier: ^1.7.0
         version: 1.20.0
+      express:
+        specifier: ^4.21.0
+        version: 4.22.3
       nestjs-pino:
         specifier: ^4.3.0
         version: 4.6.1(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(pino-http@10.5.0)(pino@9.14.0)(rxjs@7.8.2)

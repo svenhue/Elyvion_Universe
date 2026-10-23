@@ -20,12 +20,16 @@ const HOP_BY_HOP_HEADERS = new Set([
  * Auth module's JWKS — public, unauthenticated traffic never reaches a
  * business module through the Gateway.
  */
-export function createProxyMiddleware(registryCache: RegistryCacheService, authIssuerUrl: string) {
+export function createProxyMiddleware(
+  registryCache: RegistryCacheService,
+  authIssuerUrl: string,
+  apiAudience?: string,
+) {
   return async function proxyMiddleware(req: Request, res: Response, _next: NextFunction) {
     const correlationId = (req.headers['x-correlation-id'] as string) || randomUUID();
 
     try {
-      await verifyBearerToken(req.headers.authorization, authIssuerUrl);
+      await verifyBearerToken(req.headers.authorization, authIssuerUrl, apiAudience);
     } catch {
       res.status(401).json({ error: { statusCode: 401, message: 'Invalid or expired token' } });
       return;

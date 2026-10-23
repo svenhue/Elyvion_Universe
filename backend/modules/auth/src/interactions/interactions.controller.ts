@@ -79,6 +79,15 @@ export class InteractionsController {
     if (interaction.prompt.details.missingOIDCClaims) {
       grant.addOIDCClaims(interaction.prompt.details.missingOIDCClaims as string[]);
     }
+    if (interaction.prompt.details.missingResourceScopes) {
+      const missingResourceScopes = interaction.prompt.details.missingResourceScopes as Record<
+        string,
+        string[]
+      >;
+      for (const [indicator, scopes] of Object.entries(missingResourceScopes)) {
+        grant.addResourceScope(indicator, scopes.join(' '));
+      }
+    }
 
     const newGrantId = await grant.save();
 
