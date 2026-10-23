@@ -17,6 +17,10 @@ export const routes: Routes = [
       path: 'workflows',
       loadComponent: () => import('@elyvion/shared-lib').then((module) => module.WorkflowBuilderComponent),
     },
+    {
+      path: 'ontologies',
+      loadComponent: () => import('@elyvion/shared-lib').then((module) => module.OntologyEngineComponent),
+    },
     { path: 'admin', children: elvAdminRoutes },
   ]),
 ];

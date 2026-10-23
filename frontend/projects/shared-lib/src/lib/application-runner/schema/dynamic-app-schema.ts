@@ -56,6 +56,8 @@ export interface DynamicAppSchema {
   /** Id of the node to start rendering from. */
   rootComponentId: string;
   components: DynamicComponentNode[];
+  /** When on, saving this schema in pro-code also mirrors it into its own `"angular_app_config"` ontology — see `AppOntologySyncService`. Off by default. */
+  ontologySyncEnabled?: boolean;
 }
 
 /**

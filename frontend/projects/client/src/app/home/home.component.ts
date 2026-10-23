@@ -15,6 +15,10 @@ import { AuthService, DynamicAppSchema, DynamicAppService, DynamicRendererCompon
     <main class="home__content">
       <div class="mb-5 flex justify-end gap-3">
         <a
+          routerLink="/ontologies"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"
+        >Ontologien</a>
+        <a
           routerLink="/workflows"
           class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"
         >Workflows</a>

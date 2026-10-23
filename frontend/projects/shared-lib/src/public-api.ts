@@ -45,6 +45,7 @@ export * from './lib/application-runner/service/dynamic-app-config';
 export * from './lib/application-runner/service/dynamic-app.service';
 export * from './lib/application-runner/state/app-state.service';
 export * from './lib/application-runner/state/app-variable';
+export * from './lib/application-runner/ontology-sync.service';
 export * from './lib/workflow/workflow-schema';
 export * from './lib/workflow/workflow-runner.service';
 export * from './lib/workflow/workflow-api.service';
@@ -65,3 +66,7 @@ export * from './lib/admin/admin-routes';
 
 export * from './lib/pro-code/ui-element-catalog';
 export * from './lib/pro-code/pro-code.component';
+
+export * from './lib/ontology-engine/ontology-schema';
+export * from './lib/ontology-engine/ontology-api.service';
+export * from './lib/ontology-engine/ontology-engine.component';

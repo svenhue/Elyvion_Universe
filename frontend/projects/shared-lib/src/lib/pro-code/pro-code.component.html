@@ -849,6 +849,25 @@
     </aside>
   }
 
+  <button
+    type="button"
+    class="absolute right-4 top-16 z-10 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[10px] shadow-lg backdrop-blur hover:border-indigo-300"
+    title="Bei jedem Speichern wird die Anwendung zusätzlich als Ontologie (Typ „angular_app_config“) gespiegelt."
+    (click)="toggleOntologySync()"
+  >
+    <span
+      class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors"
+      [class.bg-indigo-600]="ontologySyncEnabled()"
+      [class.bg-slate-300]="!ontologySyncEnabled()"
+    >
+      <span
+        class="inline-block size-3 translate-x-0.5 rounded-full bg-white transition-transform"
+        [class.translate-x-3.5]="ontologySyncEnabled()"
+      ></span>
+    </span>
+    <span class="text-slate-600">Ontologie-Sync</span>
+  </button>
+
   <div
     class="absolute right-4 top-4 z-10 flex max-w-[calc(100vw-6rem)] items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"
   >

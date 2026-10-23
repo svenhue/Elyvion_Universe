@@ -49,7 +49,25 @@ services:
       timeout: 5s
       retries: 10
 
+  neo4j:
+    image: neo4j:5-community
+    container_name: elyvion-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/elyvion-ontology
+    ports:
+      - "7474:7474" # Browser UI
+      - "7687:7687" # Bolt protocol
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   postgres-data:
   mongo-data:
   redis-data:
+  neo4j-data:

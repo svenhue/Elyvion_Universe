@@ -1,0 +1,213 @@
+<main class="flex h-screen w-screen overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-64 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
+    <div class="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Ontologien</h1>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+      @if (loadError()) {
+        <p class="mb-2 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700">{{ loadError() }}</p>
+      }
+      @for (ontology of ontologies(); track ontology.id) {
+        <button
+          type="button"
+          class="mb-2 flex w-full flex-col items-start gap-0.5 rounded-lg border border-slate-200 p-3 text-left hover:border-indigo-400/60"
+          [class.border-indigo-500]="selectedOntologyKey() === ontology.key"
+          (click)="selectOntology(ontology.key)"
+        >
+          <span class="text-xs font-medium text-slate-900">{{ ontology.name }}</span>
+          <span class="text-[10px] text-slate-500">{{ ontology.key }} · {{ ontology.type }}</span>
+        </button>
+      } @empty {
+        <p class="px-2 py-6 text-center text-xs text-slate-400">Noch keine Ontologien angelegt.</p>
+      }
+    </div>
+
+    <div class="shrink-0 space-y-2 border-t border-slate-200 p-3">
+      <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Neue Ontologie</p>
+      <input
+        class="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-indigo-400"
+        placeholder="Key (z. B. transport-demo)"
+        [ngModel]="newOntologyKey()"
+        (ngModelChange)="newOntologyKey.set($event)"
+      />
+      <input
+        class="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-indigo-400"
+        placeholder="Name"
+        [ngModel]="newOntologyName()"
+        (ngModelChange)="newOntologyName.set($event)"
+      />
+      <button
+        type="button"
+        class="w-full rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+        (click)="createOntology()"
+      >
+        + Anlegen
+      </button>
+    </div>
+  </aside>
+
+  <div class="flex min-h-0 flex-1 overflow-hidden">
+    <!-- Canvas — always mounted (never display:none) so Cytoscape measures
+         a real, non-zero container the first time; the "pick an ontology"
+         hint is an overlay on top of it, not a replacement for it. -->
+    <div class="relative min-h-0 flex-1">
+      <!-- Cytoscape forces this element's `position` to `relative` itself
+           (to contain its internal absolutely-positioned canvas layers),
+           which makes `absolute`/`inset-0` sizing a no-op once it does —
+           `h-full w-full` sizes it via its parent's real height instead,
+           which works under either position value. -->
+      <div #cyEl class="h-full w-full"></div>
+
+      @if (!selectedOntologyKey()) {
+        <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <p class="text-sm text-slate-400">Wähle eine Ontologie links aus oder lege eine neue an.</p>
+        </div>
+      }
+
+      <div class="pointer-events-none absolute left-3 top-3 z-10 flex items-start gap-2">
+        <button
+          type="button"
+          class="pointer-events-auto rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          [disabled]="!selectedOntologyKey()"
+          (click)="addNode()"
+        >
+          + Node
+        </button>
+        <span class="pointer-events-auto rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] text-slate-500 shadow-sm">
+          {{ nodeCount() }} Nodes · {{ edgeCount() }} Beziehungen
+        </span>
+      </div>
+
+      <div class="pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-1">
+        <button
+          type="button"
+          class="pointer-events-auto grid size-8 place-items-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          title="Rauszoomen"
+          (click)="zoomBy(0.8)"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          class="pointer-events-auto grid size-8 place-items-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          title="Reinzoomen"
+          (click)="zoomBy(1.25)"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          class="pointer-events-auto rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          title="Ganzen Graphen einpassen"
+          (click)="fitToScreen()"
+        >
+          Fit
+        </button>
+      </div>
+    </div>
+
+    <!-- Properties panel -->
+    <aside class="w-80 shrink-0 overflow-y-auto border-l border-slate-200 p-4">
+      @if (selectedNode(); as node) {
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Node bearbeiten</h2>
+            <button type="button" class="text-xs text-rose-500 hover:text-rose-700" (click)="removeSelectedNode()">
+              Entfernen
+            </button>
+          </div>
+          <label class="block space-y-1 text-[10px] text-slate-500">
+            Typ
+            <input
+              class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+              [ngModel]="node.type"
+              (ngModelChange)="updateSelectedNode({ type: $event }); saveNode()"
+            />
+          </label>
+          <label class="block space-y-1 text-[10px] text-slate-500">
+            Name
+            <input
+              class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+              [ngModel]="node.name"
+              (ngModelChange)="updateSelectedNode({ name: $event }); saveNode()"
+            />
+          </label>
+
+          <div class="space-y-2 border-t border-slate-100 pt-3">
+            <div class="flex items-center justify-between">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Attribute</p>
+              <button type="button" class="text-[10px] text-indigo-600 hover:text-indigo-800" (click)="addAttribute()">
+                + Attribut
+              </button>
+            </div>
+            @for (attr of node.attributes; track $index) {
+              <div class="grid grid-cols-[1fr_1fr_3.5rem_auto] gap-1">
+                <input
+                  class="rounded-md border border-slate-200 px-1.5 py-1 text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="Schlüssel"
+                  [ngModel]="attr.key"
+                  (ngModelChange)="updateAttribute($index, { key: $event }); saveNode()"
+                />
+                <input
+                  class="rounded-md border border-slate-200 px-1.5 py-1 text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="Wert"
+                  [ngModel]="attr.value"
+                  (ngModelChange)="updateAttribute($index, { value: $event }); saveNode()"
+                />
+                <select
+                  class="rounded-md border border-slate-200 bg-white px-1 py-1 text-[10px] outline-none focus:border-indigo-400"
+                  [ngModel]="attr.type"
+                  (ngModelChange)="updateAttribute($index, { type: $event }); saveNode()"
+                >
+                  <option value="string">Text</option>
+                  <option value="number">Zahl</option>
+                  <option value="boolean">Bool</option>
+                </select>
+                <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeAttribute($index)">×</button>
+              </div>
+            } @empty {
+              <p class="text-[10px] text-slate-300">Keine Attribute.</p>
+            }
+          </div>
+
+          <div class="space-y-2 border-t border-slate-100 pt-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Beziehungen</p>
+            @for (edge of edgesForSelectedNode(); track edge.id) {
+              <div class="flex items-center justify-between rounded-md bg-slate-50 px-2 py-1 text-[10px] text-slate-600">
+                <span>{{ edge.direction === 'out' ? '→' : '←' }} {{ edge.type }}</span>
+                <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeEdge(edge.id)">×</button>
+              </div>
+            } @empty {
+              <p class="text-[10px] text-slate-300">
+                Keine Beziehungen. Über dem Node schweben, dann vom Griff zu einer anderen Box ziehen.
+              </p>
+            }
+          </div>
+        </div>
+      } @else if (selectedEdge(); as edge) {
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Beziehung bearbeiten</h2>
+            <button type="button" class="text-xs text-rose-500 hover:text-rose-700" (click)="removeEdge(edge.id)">
+              Entfernen
+            </button>
+          </div>
+          <label class="block space-y-1 text-[10px] text-slate-500">
+            Typ
+            <input
+              class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+              [ngModel]="edge.type"
+              (ngModelChange)="updateSelectedEdge({ type: $event }); saveEdge()"
+            />
+          </label>
+        </div>
+      } @else {
+        <p class="text-xs text-slate-400">
+          Wähle einen Node oder eine Beziehung aus. Scrollen zum Zoomen, Ziehen auf dem Hintergrund zum Verschieben.
+        </p>
+      }
+    </aside>
+  </div>
+</main>

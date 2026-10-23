@@ -3,8 +3,8 @@ import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 
 /**
  * Mirrors the frontend's DynamicAppSchema (see
- * frontend/projects/shared-lib/src/lib/dynamic-render/schema). This is the
- * persistence side of that same meta-schema: one document per application.
+ * frontend/projects/shared-lib/src/lib/application-runner/schema). This is
+ * the persistence side of that same meta-schema: one document per application.
  */
 @Schema({ _id: false })
 export class ComponentNode {
@@ -31,6 +31,9 @@ export class ComponentNode {
 
   @Prop({ type: [String], default: [] })
   children?: string[];
+
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  events?: Record<string, unknown[]>;
 }
 export const ComponentNodeSchema = SchemaFactory.createForClass(ComponentNode);
 
@@ -50,6 +53,9 @@ export class AppConfig {
 
   @Prop({ type: [ComponentNodeSchema], default: [] })
   components!: ComponentNode[];
+
+  @Prop({ default: false })
+  ontologySyncEnabled?: boolean;
 }
 
 export type AppConfigDocument = HydratedDocument<AppConfig>;

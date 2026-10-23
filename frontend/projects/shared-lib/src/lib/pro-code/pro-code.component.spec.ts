@@ -1,6 +1,9 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { ApiClientService } from '../api/api-client.service';
+import { ELYVION_GATEWAY_URL } from '../api/gateway-url.token';
 import { AuthService } from '../auth/auth.service';
 import { DynamicAppService } from '../application-runner/service/dynamic-app.service';
 import { ProCodeComponent } from './pro-code.component';
@@ -12,9 +15,12 @@ describe('ProCodeComponent', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: AuthService, useValue: { claims: () => null } },
         { provide: DynamicAppService, useValue: { loadApplication: () => of(null) } },
         { provide: ApiClientService, useValue: { put: () => of({ data: {} }) } },
+        { provide: ELYVION_GATEWAY_URL, useValue: 'http://localhost:3000' },
       ],
     });
     component = TestBed.runInInjectionContext(() => new ProCodeComponent());

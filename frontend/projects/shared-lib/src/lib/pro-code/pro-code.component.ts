@@ -12,6 +12,7 @@ import { AppStateService } from '../application-runner/state/app-state.service';
 import { AppVariable, AppVariableType } from '../application-runner/state/app-variable';
 import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
 import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.directive';
+import { AppOntologySyncService } from '../application-runner/ontology-sync.service';
 
 const EMPTY_SCHEMA: DynamicAppSchema = {
   id: 'default',
@@ -47,6 +48,7 @@ interface SaveRequest {
   version: string;
   rootComponentId: string;
   components: DynamicComponentNode[];
+  ontologySyncEnabled: boolean;
 }
 
 interface PreviewRequest {
@@ -125,9 +127,12 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   readonly newVariableValue = signal('');
   readonly editingVariable = signal<string | null>(null);
 
+  readonly ontologySyncEnabled = signal(false);
+
   private readonly auth = inject(AuthService);
   private readonly dynamicAppService = inject(DynamicAppService);
   private readonly api = inject(ApiClientService);
+  private readonly ontologySync = inject(AppOntologySyncService);
   private readonly saveRequests = new Subject<DynamicAppSchema>();
   private readonly historyRequests = new Subject<string>();
   private readonly previewRequests = new Subject<PreviewRequest>();
@@ -160,6 +165,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
             version: schema.version,
             rootComponentId: schema.rootComponentId,
             components: schema.components,
+            ontologySyncEnabled: this.ontologySyncEnabled(),
           };
           return this.api.put<DynamicAppSchema>('app-config', '/configs/default', body).pipe(
             map((response: ResponseEnvelope<DynamicAppSchema>) => response.data),
@@ -171,7 +177,14 @@ export class ProCodeComponent implements OnInit, OnDestroy {
           );
         }),
       )
-      .subscribe(() => this.saveStatus.set('saved'));
+      .subscribe((saved) => {
+        this.saveStatus.set('saved');
+        if (this.ontologySyncEnabled()) {
+          this.ontologySync.sync('default', saved).catch((error: unknown) => {
+            console.error('[ProCode] Ontologie-Sync fehlgeschlagen:', error);
+          });
+        }
+      });
   }
 
   ngOnInit(): void {
@@ -181,6 +194,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
       next: (schema) => {
         const normalized = normalizeSchema(schema);
         this.loadError.set('');
+        this.ontologySyncEnabled.set(Boolean((schema as DynamicAppSchema & { ontologySyncEnabled?: boolean }).ontologySyncEnabled));
         this.loadSchema(normalized);
         this.saveStatus.set('saved');
       },
@@ -571,6 +585,11 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     if (schema) {
       this.saveRequests.next(schema);
     }
+  }
+
+  toggleOntologySync(): void {
+    this.ontologySyncEnabled.update((enabled) => !enabled);
+    this.saveNow();
   }
 
   private insertElement(
