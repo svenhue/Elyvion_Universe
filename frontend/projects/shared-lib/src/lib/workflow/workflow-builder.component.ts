@@ -1,5 +1,5 @@
 import { JsonPipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -7,6 +7,13 @@ import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.di
 import { WorkflowApiService, WorkflowDefinitionRecord, toRunState } from './workflow-api.service';
 import { WorkflowRunnerService } from './workflow-runner.service';
 import { WorkflowRunState, WorkflowStep, WorkflowStepType } from './workflow-schema';
+
+/** The fields a step can send a connection out from — each maps to one of its array-valued fields. */
+type PortKey = 'next' | 'onError' | 'whenTrue' | 'branches';
+
+/** Canvas node box size — fixed, so port/edge geometry can be computed without measuring the DOM. */
+const NODE_WIDTH = 192;
+const NODE_HEIGHT = 84;
 
 /**
  * A step mid-edit in the builder — every field is a plain string (or
@@ -18,6 +25,8 @@ import { WorkflowRunState, WorkflowStep, WorkflowStepType } from './workflow-sch
 interface StepDraft {
   id: string;
   type: WorkflowStepType;
+  x: number;
+  y: number;
   next: string;
   onError: string;
   variableName: string;
@@ -38,10 +47,12 @@ interface StepDraft {
   branches: string;
 }
 
-function blankDraft(id: string, type: WorkflowStepType = 'set-variable'): StepDraft {
+function blankDraft(id: string, type: WorkflowStepType = 'set-variable', x = 40, y = 40): StepDraft {
   return {
     id,
     type,
+    x,
+    y,
     next: '',
     onError: '',
     variableName: '',
@@ -63,8 +74,13 @@ function blankDraft(id: string, type: WorkflowStepType = 'set-variable'): StepDr
   };
 }
 
-function draftFromStep(step: WorkflowStep): StepDraft {
-  const draft = blankDraft(step.id, step.type);
+function draftFromStep(step: WorkflowStep, index: number): StepDraft {
+  const draft = blankDraft(
+    step.id,
+    step.type,
+    step.position?.x ?? 40 + (index % 3) * (NODE_WIDTH + 64),
+    step.position?.y ?? 40 + Math.floor(index / 3) * (NODE_HEIGHT + 80),
+  );
   draft.next = (step.next ?? []).join(', ');
   draft.onError = (step.onError ?? []).join(', ');
   switch (step.type) {
@@ -151,6 +167,62 @@ const BACKEND_STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
   { value: 'parallel', label: 'Parallel' },
 ];
 
+interface PortDef {
+  key: PortKey;
+  label: string;
+  colorVar: string;
+}
+
+const DEFAULT_PORTS: PortDef[] = [
+  { key: 'next', label: 'Next', colorVar: '#64748b' },
+  { key: 'onError', label: 'Error', colorVar: '#e11d48' },
+];
+const CONDITION_PORTS: PortDef[] = [
+  { key: 'whenTrue', label: 'True', colorVar: '#16a34a' },
+  { key: 'next', label: 'False', colorVar: '#64748b' },
+  { key: 'onError', label: 'Error', colorVar: '#e11d48' },
+];
+const PARALLEL_PORTS: PortDef[] = [
+  { key: 'branches', label: 'Branch', colorVar: '#4f46e5' },
+  { key: 'onError', label: 'Error', colorVar: '#e11d48' },
+];
+
+function portsFor(type: WorkflowStepType): PortDef[] {
+  if (type === 'condition') return CONDITION_PORTS;
+  if (type === 'parallel') return PARALLEL_PORTS;
+  return DEFAULT_PORTS;
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Edge {
+  id: string;
+  from: Point;
+  to: Point;
+  colorVar: string;
+}
+
+interface NodeDragState {
+  id: string;
+  canvasLeft: number;
+  canvasTop: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+interface PortDragState {
+  stepId: string;
+  portKey: PortKey;
+  canvasLeft: number;
+  canvasTop: number;
+  from: Point;
+  x: number;
+  y: number;
+}
+
 @Component({
   selector: 'elv-workflow-builder',
   standalone: true,
@@ -160,6 +232,7 @@ const BACKEND_STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
 export class WorkflowBuilderComponent implements OnInit {
   private readonly workflowApi = inject(WorkflowApiService);
   private readonly workflowRunner = inject(WorkflowRunnerService);
+  private readonly canvasRef = viewChild<ElementRef<HTMLElement>>('canvasEl');
 
   readonly workflows = signal<WorkflowDefinitionRecord[]>([]);
   readonly loadError = signal('');
@@ -175,10 +248,44 @@ export class WorkflowBuilderComponent implements OnInit {
   readonly target = signal<'frontend' | 'backend'>('frontend');
   readonly startStepId = signal('');
   readonly steps = signal<StepDraft[]>([blankDraft('step-1')]);
+  readonly selectedStepId = signal<string | null>(null);
 
+  readonly nodeWidth = NODE_WIDTH;
+  readonly nodeHeight = NODE_HEIGHT;
   readonly stepTypeOptions = computed(() =>
     this.target() === 'backend' ? BACKEND_STEP_TYPES : FRONTEND_STEP_TYPES,
   );
+  readonly selectedStep = computed(() => this.steps().find((step) => step.id === this.selectedStepId()) ?? null);
+  readonly selectedStepPorts = computed(() => (this.selectedStep() ? portsFor(this.selectedStep()!.type) : []));
+
+  private readonly nodeDrag = signal<NodeDragState | null>(null);
+  private readonly portDrag = signal<PortDragState | null>(null);
+  readonly pendingEdge = computed(() => {
+    const drag = this.portDrag();
+    return drag ? { x1: drag.from.x, y1: drag.from.y, x2: drag.x, y2: drag.y } : null;
+  });
+
+  readonly edges = computed<Edge[]>(() => {
+    const steps = this.steps();
+    const byId = new Map(steps.map((step) => [step.id, step]));
+    const result: Edge[] = [];
+    for (const step of steps) {
+      const ports = portsFor(step.type);
+      ports.forEach((port, portIndex) => {
+        for (const targetId of idList((step as unknown as Record<string, string>)[port.key] ?? '')) {
+          const target = byId.get(targetId);
+          if (!target) continue;
+          result.push({
+            id: `${step.id}:${port.key}:${targetId}`,
+            from: portPoint(step, portIndex, ports.length),
+            to: { x: target.x + NODE_WIDTH / 2, y: target.y },
+            colorVar: port.colorVar,
+          });
+        }
+      });
+    }
+    return result;
+  });
 
   ngOnInit(): void {
     this.loadWorkflows();
@@ -199,6 +306,7 @@ export class WorkflowBuilderComponent implements OnInit {
     this.target.set('frontend');
     this.startStepId.set('step-1');
     this.steps.set([blankDraft('step-1')]);
+    this.selectedStepId.set('step-1');
     this.runResult.set(null);
     this.saveError.set('');
   }
@@ -211,6 +319,7 @@ export class WorkflowBuilderComponent implements OnInit {
     this.target.set(record.target);
     this.startStepId.set(record.definition.startStepId);
     this.steps.set(record.definition.steps.map(draftFromStep));
+    this.selectedStepId.set(record.definition.steps[0]?.id ?? null);
     this.runResult.set(null);
     this.saveError.set('');
   }
@@ -221,13 +330,36 @@ export class WorkflowBuilderComponent implements OnInit {
     }
   }
 
+  selectStep(id: string): void {
+    this.selectedStepId.set(id);
+  }
+
   addStep(): void {
-    const id = `step-${this.steps().length + 1}`;
-    this.steps.update((steps) => [...steps, blankDraft(id, this.stepTypeOptions()[0].value)]);
+    const steps = this.steps();
+    const id = `step-${steps.length + 1}`;
+    const last = steps[steps.length - 1];
+    const x = last ? last.x + 40 : 40;
+    const y = last ? last.y + NODE_HEIGHT + 56 : 40;
+    const draft = blankDraft(id, this.stepTypeOptions()[0].value, x, y);
+    this.steps.update((current) => [...current, draft]);
+    this.selectedStepId.set(id);
   }
 
   removeStep(id: string): void {
-    this.steps.update((steps) => steps.filter((step) => step.id !== id));
+    this.steps.update((steps) =>
+      steps
+        .filter((step) => step.id !== id)
+        .map((step) => ({
+          ...step,
+          next: removeId(step.next, id),
+          onError: removeId(step.onError, id),
+          whenTrue: removeId(step.whenTrue, id),
+          branches: removeId(step.branches, id),
+        })),
+    );
+    if (this.selectedStepId() === id) {
+      this.selectedStepId.set(null);
+    }
   }
 
   updateStep(id: string, patch: Partial<StepDraft>): void {
@@ -238,6 +370,117 @@ export class WorkflowBuilderComponent implements OnInit {
     if (event.target instanceof HTMLSelectElement) {
       this.updateStep(id, { type: event.target.value as WorkflowStepType });
     }
+  }
+
+  portsForStep(step: StepDraft): PortDef[] {
+    return portsFor(step.type);
+  }
+
+  nodeSummary(step: StepDraft): string {
+    switch (step.type) {
+      case 'set-variable':
+        return `${step.variableName || '…'} = ${step.value || '…'}`;
+      case 'run-script':
+        return 'Skript';
+      case 'call-backend-workflow':
+        return `→ ${step.workflowKey || '…'}`;
+      case 'http-request':
+        return `${step.method} ${step.url || '…'}`;
+      case 'call-service':
+        return `${step.serviceName || '…'}${step.path || ''}`;
+      case 'condition':
+        return `${step.conditionPath || '…'} == ${step.equals || '…'}`;
+      case 'delay':
+        return `${step.milliseconds || 0} ms`;
+      case 'parallel':
+        return `${idList(step.branches).length} Branches`;
+    }
+  }
+
+  // --- Canvas: dragging a node to reposition it ---
+
+  startNodeDrag(event: PointerEvent, step: StepDraft): void {
+    const canvas = this.canvasRef()?.nativeElement;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.nodeDrag.set({
+      id: step.id,
+      canvasLeft: rect.left,
+      canvasTop: rect.top,
+      offsetX: event.clientX - rect.left - step.x,
+      offsetY: event.clientY - rect.top - step.y,
+    });
+    this.selectStep(step.id);
+  }
+
+  onNodePointerMove(event: PointerEvent): void {
+    const drag = this.nodeDrag();
+    if (!drag) return;
+    const x = Math.max(0, event.clientX - drag.canvasLeft - drag.offsetX);
+    const y = Math.max(0, event.clientY - drag.canvasTop - drag.offsetY);
+    this.updateStep(drag.id, { x, y });
+  }
+
+  onNodePointerUp(): void {
+    this.nodeDrag.set(null);
+  }
+
+  // --- Canvas: dragging a connection from a port ---
+
+  startPortDrag(event: PointerEvent, step: StepDraft, portKey: PortKey, portIndex: number, portCount: number): void {
+    event.stopPropagation();
+    const canvas = this.canvasRef()?.nativeElement;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const from = portPoint(step, portIndex, portCount);
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.portDrag.set({
+      stepId: step.id,
+      portKey,
+      canvasLeft: rect.left,
+      canvasTop: rect.top,
+      from,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  }
+
+  onPortPointerMove(event: PointerEvent): void {
+    const drag = this.portDrag();
+    if (!drag) return;
+    this.portDrag.set({ ...drag, x: event.clientX - drag.canvasLeft, y: event.clientY - drag.canvasTop });
+  }
+
+  onPortPointerUp(event: PointerEvent): void {
+    const drag = this.portDrag();
+    this.portDrag.set(null);
+    if (!drag) return;
+    const x = event.clientX - drag.canvasLeft;
+    const y = event.clientY - drag.canvasTop;
+    const target = this.steps().find((step) => step.id !== drag.stepId && pointInNode(x, y, step));
+    if (target) {
+      this.addConnection(drag.stepId, drag.portKey, target.id);
+    }
+  }
+
+  private addConnection(stepId: string, portKey: PortKey, targetId: string): void {
+    const step = this.steps().find((candidate) => candidate.id === stepId);
+    if (!step) return;
+    const current = idList((step as unknown as Record<string, string>)[portKey] ?? '');
+    if (current.includes(targetId)) return;
+    this.updateStep(stepId, { [portKey]: [...current, targetId].join(', ') } as Partial<StepDraft>);
+  }
+
+  connectionsFor(step: StepDraft, portKey: PortKey): string[] {
+    return idList((step as unknown as Record<string, string>)[portKey] ?? '');
+  }
+
+  removeConnection(stepId: string, portKey: PortKey, targetId: string): void {
+    const step = this.steps().find((candidate) => candidate.id === stepId);
+    if (!step) return;
+    const current = idList((step as unknown as Record<string, string>)[portKey] ?? '');
+    this.updateStep(stepId, { [portKey]: current.filter((id) => id !== targetId).join(', ') } as Partial<StepDraft>);
   }
 
   async save(): Promise<void> {
@@ -309,6 +552,7 @@ export class WorkflowBuilderComponent implements OnInit {
       id: draft.id,
       next: idList(draft.next),
       onError: idList(draft.onError),
+      position: { x: draft.x, y: draft.y },
     };
     switch (draft.type) {
       case 'set-variable':
@@ -365,6 +609,21 @@ export class WorkflowBuilderComponent implements OnInit {
       }
     }
   }
+}
+
+function portPoint(step: StepDraft, index: number, count: number): Point {
+  const spacing = NODE_WIDTH / (count + 1);
+  return { x: step.x + spacing * (index + 1), y: step.y + NODE_HEIGHT };
+}
+
+function pointInNode(x: number, y: number, step: StepDraft): boolean {
+  return x >= step.x && x <= step.x + NODE_WIDTH && y >= step.y && y <= step.y + NODE_HEIGHT;
+}
+
+function removeId(raw: string, id: string): string {
+  return idList(raw)
+    .filter((candidate) => candidate !== id)
+    .join(', ');
 }
 
 function errorMessage(error: unknown, fallback: string): string {

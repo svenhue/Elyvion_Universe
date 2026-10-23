@@ -21,6 +21,8 @@ export interface WorkflowStepBase {
   next?: string[];
   /** Step ids to run instead, on failure — the compensation/error branch. */
   onError?: string[];
+  /** Canvas position in the frontend builder's graph view — purely presentational, never read by the processor. */
+  position?: { x: number; y: number };
 }
 
 export interface SetVariableStep extends WorkflowStepBase {

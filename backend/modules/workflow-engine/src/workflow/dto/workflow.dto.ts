@@ -4,6 +4,7 @@ const stepBase = {
   id: z.string().min(1),
   next: z.array(z.string()).optional(),
   onError: z.array(z.string()).optional(),
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
 };
 
 const workflowStepSchema = z.discriminatedUnion('type', [
