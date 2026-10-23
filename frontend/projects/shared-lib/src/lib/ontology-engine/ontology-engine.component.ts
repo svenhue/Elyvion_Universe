@@ -46,6 +46,25 @@ function rowsToAttributes(rows: AttributeRow[]): Record<string, OntologyAttribut
   return attributes;
 }
 
+/** True when two or more nodes share the exact same position — the signature of nodes that were never given a real layout (e.g. everything synced in at the same default x/y) and would render stacked on top of each other. */
+function needsAutoLayout(nodes: { x: number; y: number }[]): boolean {
+  if (nodes.length < 2) return false;
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    const key = `${node.x},${node.y}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
+/** Golden-angle spiral around a center point — each successive index lands further out and at a different angle than the last, so newly added nodes never stack on an earlier one. */
+function spreadPosition(centerX: number, centerY: number, index: number): { x: number; y: number } {
+  const angle = index * 137.5 * (Math.PI / 180);
+  const radius = 50 * Math.sqrt(index + 1);
+  return { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) };
+}
+
 /** Stable, readable color per node `type`, so every node of the same type reads as the same color without a hand-maintained palette. */
 function colorForType(type: string): string {
   let hash = 0;
@@ -104,6 +123,11 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
 
   private cy: cytoscape.Core | null = null;
   private eh: ReturnType<cytoscape.Core['edgehandles']> | null = null;
+  // Incremented synchronously on every addNode() call, independent of
+  // cy.nodes().length — that count only updates once the node's create
+  // request resolves, so two "+ Node" clicks fired before the first one
+  // resolves would otherwise compute the same spiral position twice.
+  private nodeSpreadCounter = 0;
 
   ngOnInit(): void {
     this.loadOntologies();
@@ -289,10 +313,28 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
       // selected, so Cytoscape's cached size is stale the first time —
       // resize before fitting, or the viewport math is wrong.
       cy.resize();
+      if (needsAutoLayout(graph.nodes)) {
+        await this.runAutoLayout(key, cy);
+      }
       cy.fit(undefined, 60);
     } catch (error) {
       this.loadError.set(errorMessage(error, 'Graph konnte nicht geladen werden.'));
     }
+  }
+
+  /** Runs a force-directed layout once (for graphs whose nodes were never positioned, e.g. a fresh sync) and persists the computed positions, so this only ever runs once per such graph instead of re-shuffling it on every load. */
+  private async runAutoLayout(key: string, cy: cytoscape.Core): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const layout = cy.layout({ name: 'cose', animate: false, padding: 60 });
+      layout.one('layoutstop', () => resolve());
+      layout.run();
+    });
+    await Promise.all(
+      cy.nodes().map((node) => {
+        const { x, y } = node.position();
+        return firstValueFrom(this.ontologyApi.updateNode(key, node.id(), { x, y })).catch(() => undefined);
+      }),
+    );
   }
 
   async addNode(): Promise<void> {
@@ -300,8 +342,7 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
     const cy = this.cy;
     if (!key || !cy) return;
     const extent = cy.extent();
-    const x = (extent.x1 + extent.x2) / 2;
-    const y = (extent.y1 + extent.y2) / 2;
+    const { x, y } = spreadPosition((extent.x1 + extent.x2) / 2, (extent.y1 + extent.y2) / 2, this.nodeSpreadCounter++);
     const created = await firstValueFrom(
       this.ontologyApi.createNode(key, { type: 'Object', name: 'Neues Objekt', x, y, attributes: {} }),
     );

@@ -1,5 +1,4 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { AuthService, DynamicAppSchema, DynamicAppService, DynamicRendererComponent } from '@elyvion/shared-lib';
 
 /**
@@ -10,23 +9,9 @@ import { AuthService, DynamicAppSchema, DynamicAppService, DynamicRendererCompon
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [DynamicRendererComponent, RouterLink],
+  imports: [DynamicRendererComponent],
   template: `
     <main class="home__content">
-      <div class="mb-5 flex justify-end gap-3">
-        <a
-          routerLink="/ontologies"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"
-        >Ontologien</a>
-        <a
-          routerLink="/workflows"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"
-        >Workflows</a>
-        <a
-          routerLink="/pro-code"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"
-        >Pro-Code konfigurieren</a>
-      </div>
       @if (schema(); as resolved) {
         <elv-dynamic-renderer [schema]="resolved" />
       } @else if (error()) {
