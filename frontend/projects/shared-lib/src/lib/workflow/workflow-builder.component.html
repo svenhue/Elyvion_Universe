@@ -1,0 +1,309 @@
+<main class="flex h-screen w-screen overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
+    <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-4">
+      <div class="flex items-center gap-2">
+        <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+        <h1 class="text-sm font-semibold">Workflows</h1>
+      </div>
+      <button
+        type="button"
+        class="rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+        (click)="newWorkflow()"
+      >
+        + Neu
+      </button>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+      @if (loadError()) {
+        <p class="mb-2 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700">{{ loadError() }}</p>
+      }
+      @for (workflow of workflows(); track workflow.id) {
+        <button
+          type="button"
+          class="mb-2 flex w-full flex-col items-start gap-0.5 rounded-lg border border-slate-200 p-3 text-left hover:border-indigo-400/60"
+          [class.border-indigo-500]="editingKey() === workflow.key"
+          (click)="editWorkflow(workflow)"
+        >
+          <span class="text-xs font-medium text-slate-900">{{ workflow.name }}</span>
+          <span class="text-[10px] text-slate-500">{{ workflow.key }} · v{{ workflow.version }} · {{ workflow.target }}</span>
+        </button>
+      } @empty {
+        <p class="px-2 py-6 text-center text-xs text-slate-400">Noch keine Workflows angelegt.</p>
+      }
+    </div>
+  </aside>
+
+  <section class="flex min-w-0 flex-1 flex-col overflow-y-auto">
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+      <div class="grid grid-cols-2 gap-3">
+        <label class="space-y-1 text-xs text-slate-600">
+          Key
+          <input
+            class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs outline-none focus:border-indigo-400"
+            [disabled]="!!editingKey()"
+            [ngModel]="key()"
+            (ngModelChange)="key.set($event)"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-slate-600">
+          Name
+          <input
+            class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs outline-none focus:border-indigo-400"
+            [ngModel]="name()"
+            (ngModelChange)="name.set($event)"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-slate-600">
+          Target
+          <select
+            class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs outline-none focus:border-indigo-400"
+            [ngModel]="target()"
+            (change)="setTarget($event)"
+          >
+            <option value="frontend">Frontend</option>
+            <option value="backend">Backend</option>
+          </select>
+        </label>
+        <label class="space-y-1 text-xs text-slate-600">
+          Start-Step-Id
+          <input
+            class="w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-xs outline-none focus:border-indigo-400"
+            [ngModel]="startStepId()"
+            (ngModelChange)="startStepId.set($event)"
+          />
+        </label>
+      </div>
+      @if (editingKey()) {
+        <p class="text-[10px] text-slate-400">
+          Bearbeitet v{{ editingVersion() }} von "{{ editingKey() }}" — Speichern legt eine neue Version an.
+        </p>
+      }
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Steps</h2>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            (click)="addStep()"
+          >
+            + Step hinzufügen
+          </button>
+        </div>
+
+        @for (step of steps(); track step.id) {
+          <div class="space-y-2.5 rounded-xl border border-slate-200 p-3">
+            <div class="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                placeholder="step-id"
+                [ngModel]="step.id"
+                (ngModelChange)="updateStep(step.id, { id: $event })"
+              />
+              <select
+                class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                [ngModel]="step.type"
+                (change)="setStepType(step.id, $event)"
+              >
+                @for (option of stepTypeOptions(); track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+              <button
+                type="button"
+                class="rounded-md px-2 text-xs text-rose-500 hover:text-rose-700"
+                (click)="removeStep(step.id)"
+              >
+                Entfernen
+              </button>
+            </div>
+
+            @if (step.type === 'set-variable') {
+              <div class="grid grid-cols-2 gap-2">
+                <input
+                  class="rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="Variablenname"
+                  [ngModel]="step.variableName"
+                  (ngModelChange)="updateStep(step.id, { variableName: $event })"
+                />
+                <input
+                  elvVariableAutocomplete
+                  class="rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="Wert oder $context.step1"
+                  [ngModel]="step.value"
+                  (ngModelChange)="updateStep(step.id, { value: $event })"
+                />
+              </div>
+            } @else if (step.type === 'run-script') {
+              <textarea
+                class="min-h-16 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                placeholder="appState.setVariable('x', 'number', 1)"
+                [ngModel]="step.script"
+                (ngModelChange)="updateStep(step.id, { script: $event })"
+              ></textarea>
+            } @else if (step.type === 'call-backend-workflow') {
+              <div class="grid grid-cols-2 gap-2">
+                <input
+                  class="rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="Workflow-Key"
+                  [ngModel]="step.workflowKey"
+                  (ngModelChange)="updateStep(step.id, { workflowKey: $event })"
+                />
+                <input
+                  class="rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                  placeholder='Context (JSON, optional)'
+                  [ngModel]="step.context"
+                  (ngModelChange)="updateStep(step.id, { context: $event })"
+                />
+              </div>
+            } @else if (step.type === 'http-request' || step.type === 'call-service') {
+              <div class="grid grid-cols-[6rem_1fr] gap-2">
+                <select
+                  class="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                  [ngModel]="step.method"
+                  (ngModelChange)="updateStep(step.id, { method: $event })"
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+                @if (step.type === 'http-request') {
+                  <input
+                    class="rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                    placeholder="https://… oder $context.step1"
+                    [ngModel]="step.url"
+                    (ngModelChange)="updateStep(step.id, { url: $event })"
+                  />
+                } @else {
+                  <input
+                    class="rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                    placeholder="Service-Name"
+                    [ngModel]="step.serviceName"
+                    (ngModelChange)="updateStep(step.id, { serviceName: $event })"
+                  />
+                }
+              </div>
+              @if (step.type === 'call-service') {
+                <input
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="/pfad"
+                  [ngModel]="step.path"
+                  (ngModelChange)="updateStep(step.id, { path: $event })"
+                />
+              }
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                placeholder="Body (JSON, optional)"
+                [ngModel]="step.body"
+                (ngModelChange)="updateStep(step.id, { body: $event })"
+              />
+            } @else if (step.type === 'condition') {
+              <div class="grid grid-cols-2 gap-2">
+                <input
+                  class="rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="$context.step1"
+                  [ngModel]="step.conditionPath"
+                  (ngModelChange)="updateStep(step.id, { conditionPath: $event })"
+                />
+                <input
+                  class="rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                  placeholder="gleich diesem Wert"
+                  [ngModel]="step.equals"
+                  (ngModelChange)="updateStep(step.id, { equals: $event })"
+                />
+              </div>
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                placeholder="whenTrue: step-a, step-b"
+                [ngModel]="step.whenTrue"
+                (ngModelChange)="updateStep(step.id, { whenTrue: $event })"
+              />
+            } @else if (step.type === 'delay') {
+              <input
+                type="number"
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-indigo-400"
+                placeholder="Millisekunden"
+                [ngModel]="step.milliseconds"
+                (ngModelChange)="updateStep(step.id, { milliseconds: $event })"
+              />
+            } @else if (step.type === 'parallel') {
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                placeholder="branches: step-a, step-b"
+                [ngModel]="step.branches"
+                (ngModelChange)="updateStep(step.id, { branches: $event })"
+              />
+            }
+
+            <div class="grid grid-cols-2 gap-2">
+              <input
+                class="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 font-mono text-[10px] outline-none focus:border-indigo-400"
+                placeholder="next: step-a, step-b"
+                [ngModel]="step.next"
+                (ngModelChange)="updateStep(step.id, { next: $event })"
+              />
+              <input
+                class="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 font-mono text-[10px] outline-none focus:border-indigo-400"
+                placeholder="onError: step-a"
+                [ngModel]="step.onError"
+                (ngModelChange)="updateStep(step.id, { onError: $event })"
+              />
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (saveError()) {
+        <p class="rounded-lg bg-rose-50 p-3 text-xs leading-5 text-rose-700">{{ saveError() }}</p>
+      }
+
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          class="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          [disabled]="saving()"
+          (click)="save()"
+        >
+          {{ saving() ? 'Speichert …' : 'Speichern' }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          [disabled]="running() || !key()"
+          (click)="run()"
+        >
+          {{ running() ? 'Läuft …' : 'Jetzt ausführen' }}
+        </button>
+      </div>
+
+      @if (runResult(); as result) {
+        <div
+          class="space-y-2 rounded-xl border p-4"
+          [class.border-emerald-300]="result.status === 'succeeded'"
+          [class.bg-emerald-50]="result.status === 'succeeded'"
+          [class.border-rose-300]="result.status === 'failed'"
+          [class.bg-rose-50]="result.status === 'failed'"
+        >
+          <p class="text-xs font-semibold">
+            Status: {{ result.status }}
+            @if (result.error) {
+              — {{ result.error }}
+            }
+          </p>
+          @for (step of result.steps; track step.stepId) {
+            <p class="text-[11px] text-slate-600">
+              {{ step.stepId }} — {{ step.status }}
+              @if (step.error) {
+                ({{ step.error }})
+              }
+            </p>
+          }
+          <pre class="overflow-x-auto rounded-lg bg-white p-2 text-[10px] text-slate-600">{{ result.context | json }}</pre>
+        </div>
+      }
+    </div>
+  </section>
+</main>

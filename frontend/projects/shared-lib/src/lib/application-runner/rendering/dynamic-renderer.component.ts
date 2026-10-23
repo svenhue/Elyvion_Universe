@@ -22,9 +22,8 @@ import { DynamicAppSchema, DynamicComponentNode, isAbsolutelyPositioned } from '
 import { EventAction } from '../schema/event-action';
 import { AppStateService } from '../state/app-state.service';
 import { parseVariableReference } from '../state/app-variable';
-import { ApiClientService } from '../../api/api-client.service';
-import { WorkflowDefinitionRegistryService } from '../workflow/workflow-definition-registry.service';
-import { WorkflowRunnerService } from '../workflow/workflow-runner.service';
+import { WorkflowApiService } from '../../workflow/workflow-api.service';
+import { WorkflowRunnerService } from '../../workflow/workflow-runner.service';
 
 interface RenderSession {
   views: ViewRef[];
@@ -70,8 +69,7 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
   private readonly applicationRef = inject(ApplicationRef);
   private readonly document = inject(DOCUMENT);
   private readonly appState = inject(AppStateService);
-  private readonly api = inject(ApiClientService);
-  private readonly workflowDefinitions = inject(WorkflowDefinitionRegistryService);
+  private readonly workflowApi = inject(WorkflowApiService);
   private readonly workflowRunner = inject(WorkflowRunnerService);
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement;
   private activeSession?: RenderSession;
@@ -419,20 +417,24 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
         return;
       case 'run-workflow': {
         if (!action.workflowKey) return;
-        const definition = this.workflowDefinitions.get(action.workflowKey);
-        if (definition?.target === 'frontend') {
-          this.workflowRunner.run(definition).then((result) => {
-            if (result.status === 'failed') {
-              console.error(`[DynamicRenderer] workflow "${action.workflowKey}" failed:`, result.error);
+        const key = action.workflowKey;
+        this.workflowApi.get(key).subscribe({
+          next: (record) => {
+            if (record.target === 'frontend') {
+              this.workflowRunner.run(this.workflowApi.toDefinition(record)).then((result) => {
+                if (result.status === 'failed') {
+                  console.error(`[DynamicRenderer] workflow "${key}" failed:`, result.error);
+                }
+              });
+            } else {
+              // Backend-target — the workflow-engine module executes it itself.
+              this.workflowApi.run(key).subscribe({
+                error: (error: unknown) => console.error(`[DynamicRenderer] workflow "${key}" failed:`, error),
+              });
             }
-          });
-        } else {
-          // No local definition (or it's `target: "backend"`) — ask the
-          // workflow-engine module to run it by key instead.
-          this.api.post('workflow-engine', `/definitions/${action.workflowKey}/run`, {}).subscribe({
-            error: (error: unknown) => console.error(`[DynamicRenderer] workflow "${action.workflowKey}" failed:`, error),
-          });
-        }
+          },
+          error: (error: unknown) => console.error(`[DynamicRenderer] no workflow "${key}":`, error),
+        });
         return;
       }
     }

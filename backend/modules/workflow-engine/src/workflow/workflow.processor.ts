@@ -50,7 +50,7 @@ export class WorkflowProcessor extends WorkerHost {
       // Every step's raw output lands under `steps.<id>` (reachable as
       // `$context.steps.step1.body...`, for chaining http/service calls);
       // `set-variable` additionally writes its resolved value to the
-      // user-chosen `key`, so later steps can reference it by name.
+      // user-chosen `variableName`, so later steps can reference it by name.
       let nextContext = context;
       if (output !== undefined) {
         nextContext = {
@@ -59,7 +59,7 @@ export class WorkflowProcessor extends WorkerHost {
         };
       }
       if (step.type === 'set-variable') {
-        nextContext = { ...nextContext, [step.key]: output };
+        nextContext = { ...nextContext, [step.variableName]: output };
       }
 
       await this.prisma.$transaction([

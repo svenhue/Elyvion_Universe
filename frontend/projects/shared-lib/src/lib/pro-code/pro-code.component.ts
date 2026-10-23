@@ -11,7 +11,7 @@ import { DynamicAppService } from '../application-runner/service/dynamic-app.ser
 import { AppStateService } from '../application-runner/state/app-state.service';
 import { AppVariable, AppVariableType } from '../application-runner/state/app-variable';
 import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
-import { ElvVariableAutocompleteDirective } from './variable-autocomplete.directive';
+import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.directive';
 
 const EMPTY_SCHEMA: DynamicAppSchema = {
   id: 'default',

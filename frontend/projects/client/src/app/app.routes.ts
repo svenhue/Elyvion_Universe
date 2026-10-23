@@ -13,6 +13,10 @@ export const routes: Routes = [
       path: 'pro-code',
       loadComponent: () => import('@elyvion/shared-lib').then((module) => module.ProCodeComponent),
     },
+    {
+      path: 'workflows',
+      loadComponent: () => import('@elyvion/shared-lib').then((module) => module.WorkflowBuilderComponent),
+    },
     { path: 'admin', children: elvAdminRoutes },
   ]),
 ];

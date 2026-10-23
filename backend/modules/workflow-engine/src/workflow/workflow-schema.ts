@@ -25,7 +25,7 @@ export interface WorkflowStepBase {
 
 export interface SetVariableStep extends WorkflowStepBase {
   type: 'set-variable';
-  key: string;
+  variableName: string;
   /** Literal value, or `"$steps.someStepId.output.field"` to read from an earlier step's output. */
   value: unknown;
 }

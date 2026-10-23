@@ -1,10 +1,19 @@
 /**
- * A workflow step graph for a `target: "frontend"` workflow — interpreted
- * in-browser by `WorkflowRunnerService` (an XState machine built from this
- * graph at run time). Mirrors the backend workflow-engine module's own
- * `workflow-schema.ts` for the step kinds both sides share (`set-variable`,
- * `condition`, `delay`, `parallel`), plus frontend-only kinds that need a
- * live rendered app to act on (`run-script`, `call-backend-workflow`).
+ * A workflow step graph — authored in `WorkflowBuilderComponent` for
+ * *either* a `target: "frontend"` workflow (interpreted in-browser by
+ * `WorkflowRunnerService`, an XState machine built from this graph at run
+ * time) or a `target: "backend"` one (stored the same way but executed by
+ * the backend `workflow-engine` module's own processor). One step-type
+ * union covers both, so the builder has a single, consistent list to
+ * offer — see `stepTypesForTarget()` in the builder for which of these
+ * each target actually supports:
+ * - `set-variable`, `http-request`, `condition`, `delay`, `parallel`:
+ *   shared, run by whichever side executes the workflow.
+ * - `run-script`, `call-backend-workflow`: frontend-only — `run-script`
+ *   needs a trusted in-browser `Function()`, `call-backend-workflow` is
+ *   how a frontend workflow hands off to a backend one.
+ * - `call-service`: backend-only — an inter-module call via the
+ *   Registry; not reachable the same way from a browser.
  *
  * `control-component` / `trigger-event` (the event-handler system's other
  * action kinds, see `EventAction`) aren't available as workflow steps yet
@@ -12,7 +21,15 @@
  * a specific rendered component from there needs a registry this first
  * pass doesn't build. Next step, not done here.
  */
-export type WorkflowStepType = 'set-variable' | 'run-script' | 'call-backend-workflow' | 'condition' | 'delay' | 'parallel';
+export type WorkflowStepType =
+  | 'set-variable'
+  | 'run-script'
+  | 'http-request'
+  | 'call-backend-workflow'
+  | 'call-service'
+  | 'condition'
+  | 'delay'
+  | 'parallel';
 
 export interface WorkflowStepBase {
   id: string;
@@ -44,6 +61,24 @@ export interface WorkflowCallBackendStep extends WorkflowStepBase {
   context?: unknown;
 }
 
+export interface WorkflowHttpRequestStep extends WorkflowStepBase {
+  type: 'http-request';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /** Absolute URL, or a `"$context...."` path, resolved against this run's context before the call. */
+  url: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+export interface WorkflowCallServiceStep extends WorkflowStepBase {
+  type: 'call-service';
+  /** Backend-only — a module name as registered with the Registry (see `@elyvion/shared`'s `registerModule`). */
+  serviceName: string;
+  path: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: unknown;
+}
+
 export interface WorkflowConditionStep extends WorkflowStepBase {
   type: 'condition';
   /** `"$context.someStepId"` (or a dotted path into it) read from this run's context. */
@@ -67,7 +102,9 @@ export interface WorkflowParallelStep extends WorkflowStepBase {
 export type WorkflowStep =
   | WorkflowSetVariableStep
   | WorkflowRunScriptStep
+  | WorkflowHttpRequestStep
   | WorkflowCallBackendStep
+  | WorkflowCallServiceStep
   | WorkflowConditionStep
   | WorkflowDelayStep
   | WorkflowParallelStep;

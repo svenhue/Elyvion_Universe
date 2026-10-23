@@ -34,6 +34,7 @@ export * from './lib/ui/divider.component';
 export * from './lib/ui/skeleton.component';
 export * from './lib/ui/form-field.component';
 export * from './lib/ui/stateful-ui-component';
+export * from './lib/ui/variable-autocomplete.directive';
 
 export * from './lib/application-runner/schema/dynamic-app-schema';
 export * from './lib/application-runner/schema/event-action';
@@ -44,9 +45,10 @@ export * from './lib/application-runner/service/dynamic-app-config';
 export * from './lib/application-runner/service/dynamic-app.service';
 export * from './lib/application-runner/state/app-state.service';
 export * from './lib/application-runner/state/app-variable';
-export * from './lib/application-runner/workflow/workflow-schema';
-export * from './lib/application-runner/workflow/workflow-runner.service';
-export * from './lib/application-runner/workflow/workflow-definition-registry.service';
+export * from './lib/workflow/workflow-schema';
+export * from './lib/workflow/workflow-runner.service';
+export * from './lib/workflow/workflow-api.service';
+export * from './lib/workflow/workflow-builder.component';
 
 export * from './lib/auth-pages/auth.guard';
 export * from './lib/auth-pages/login-page.component';

@@ -13,7 +13,11 @@ import { AuthService, DynamicAppSchema, DynamicAppService, DynamicRendererCompon
   imports: [DynamicRendererComponent, RouterLink],
   template: `
     <main class="home__content">
-      <div class="mb-5 flex justify-end">
+      <div class="mb-5 flex justify-end gap-3">
+        <a
+          routerLink="/workflows"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"
+        >Workflows</a>
         <a
           routerLink="/pro-code"
           class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-500 hover:text-indigo-700"

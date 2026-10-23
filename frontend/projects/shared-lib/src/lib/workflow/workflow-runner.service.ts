@@ -1,9 +1,10 @@
 import { Injectable, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { createActor, fromPromise, setup } from 'xstate';
-import { ApiClientService, ResponseEnvelope } from '../../api/api-client.service';
-import { AppStateService } from '../state/app-state.service';
+import { AppStateService } from '../application-runner/state/app-state.service';
 import { readPath, resolveTemplate } from './resolve-template';
-import { WorkflowDefinition, WorkflowRunState, WorkflowStep, WorkflowStepRunRecord } from './workflow-schema';
+import { WorkflowApiService } from './workflow-api.service';
+import { WorkflowDefinition, WorkflowRunState, WorkflowStep } from './workflow-schema';
 
 /** Thrown out of `runGraph` on an unrecovered step failure, carrying the run state accumulated so far. */
 class WorkflowRunError extends Error {
@@ -29,7 +30,7 @@ class WorkflowRunError extends Error {
 @Injectable({ providedIn: 'root' })
 export class WorkflowRunnerService {
   private readonly appState = inject(AppStateService);
-  private readonly api = inject(ApiClientService);
+  private readonly workflowApi = inject(WorkflowApiService);
 
   /** Starts `definition` and resolves once the whole run finishes — success or failure both resolve, never reject, so callers don't need a catch just to read the final state. */
   run(definition: WorkflowDefinition, initialContext: Record<string, unknown> = {}): Promise<WorkflowRunState> {
@@ -135,18 +136,37 @@ export class WorkflowRunnerService {
       }
 
       case 'call-backend-workflow': {
-        const body = step.context ? resolveTemplate(step.context, context) : {};
-        const response = await new Promise<ResponseEnvelope<unknown>>((resolve, reject) => {
-          this.api
-            .post<unknown>('workflow-engine', `/definitions/${step.workflowKey}/run`, { context: body })
-            .subscribe({ next: resolve, error: reject });
-        });
-        return response.data;
+        const body = (step.context ? resolveTemplate(step.context, context) : {}) as Record<string, unknown>;
+        return firstValueFrom(this.workflowApi.run(step.workflowKey, body));
       }
+
+      case 'http-request': {
+        const url = resolveTemplate(step.url, context) as string;
+        const body = step.body ? resolveTemplate(step.body, context) : undefined;
+        const response = await fetch(url, {
+          method: step.method,
+          headers: { 'content-type': 'application/json', ...(step.headers ?? {}) },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        return { status: response.status, body: await safeJson(response) };
+      }
+
+      case 'call-service':
+        // Backend-only (see `WorkflowStepType`'s doc comment) — the builder
+        // shouldn't let a frontend-target workflow contain one of these.
+        throw new Error(`"call-service" step "${step.id}" can't run client-side — it's a backend-target-only step kind.`);
     }
   }
 }
 
 function failedState(error: string): WorkflowRunState {
   return { status: 'failed', context: {}, steps: [], error };
+}
+
+async function safeJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }

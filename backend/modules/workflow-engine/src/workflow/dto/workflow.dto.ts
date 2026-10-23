@@ -7,7 +7,7 @@ const stepBase = {
 };
 
 const workflowStepSchema = z.discriminatedUnion('type', [
-  z.object({ ...stepBase, type: z.literal('set-variable'), key: z.string().min(1), value: z.unknown() }),
+  z.object({ ...stepBase, type: z.literal('set-variable'), variableName: z.string().min(1), value: z.unknown() }),
   z.object({
     ...stepBase,
     type: z.literal('http-request'),
@@ -33,6 +33,17 @@ const workflowStepSchema = z.discriminatedUnion('type', [
   }),
   z.object({ ...stepBase, type: z.literal('delay'), milliseconds: z.number().int().nonnegative() }),
   z.object({ ...stepBase, type: z.literal('parallel'), branches: z.array(z.string()).min(1) }),
+  // Frontend-only step kinds (see the frontend's `workflow-schema.ts`) —
+  // the backend only ever *stores* these, for a `target: "frontend"`
+  // workflow; its own processor never executes them (see its step
+  // switch, which has no case for either).
+  z.object({ ...stepBase, type: z.literal('run-script'), script: z.string().min(1) }),
+  z.object({
+    ...stepBase,
+    type: z.literal('call-backend-workflow'),
+    workflowKey: z.string().min(1),
+    context: z.unknown().optional(),
+  }),
 ]);
 
 export const createWorkflowSchema = z.object({
