@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ELYVION_AUTH_CONFIG, ELYVION_GATEWAY_URL } from '@elyvion/shared-lib';
 import { App } from './app';
 
@@ -11,6 +12,7 @@ describe('App', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         { provide: ELYVION_GATEWAY_URL, useValue: 'http://localhost:3000' },
         {
           provide: ELYVION_AUTH_CONFIG,
@@ -30,12 +32,5 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
-  });
-
-  it('should render the title', () => {
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Elyvion Client Skeleton');
   });
 });

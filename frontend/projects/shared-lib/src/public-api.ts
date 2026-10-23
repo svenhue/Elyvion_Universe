@@ -18,3 +18,8 @@ export * from './lib/dynamic-render/registry/provide-dynamic-components';
 export * from './lib/dynamic-render/rendering/dynamic-renderer.component';
 export * from './lib/dynamic-render/service/dynamic-app-config';
 export * from './lib/dynamic-render/service/dynamic-app.service';
+
+export * from './lib/auth-pages/auth.guard';
+export * from './lib/auth-pages/login-page.component';
+export * from './lib/auth-pages/register-page.component';
+export * from './lib/auth-pages/provide-elyvion-auth-routes';

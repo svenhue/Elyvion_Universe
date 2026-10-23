@@ -68,6 +68,16 @@ def me(user: dict = Depends(CurrentUser)):
     return user
 ```
 
+## Einen öffentlichen Endpoint am Gateway freischalten
+
+Ausnahme von der Regel oben: ein neuer Account hat noch kein Token (Registrierung). Dafür gibt es `PUBLIC_ROUTES` in `backend/modules/gateway/src/main.ts` — eine explizite Allowlist aus `{ moduleName: ['/exakter/pfad'] }`, nicht mehr. Alles andere bleibt per Default hinter Auth:
+
+```ts
+const PUBLIC_ROUTES: PublicRouteAllowlist = {
+  users: ['/register'],
+};
+```
+
 ## Einen neuen OIDC-Client registrieren
 
 Neues Frontend/App? Redirect-URI in `backend/modules/auth/src/oidc/clients.ts` eintragen (Allowlist — nicht zur Laufzeit verhandelbar). Für produktive Mandanten-Clients diese statische Liste durch eine DB-gestützte Client-Registrierung ersetzen.

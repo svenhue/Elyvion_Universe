@@ -36,15 +36,10 @@ export class ElyvionExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
-
     const body: ErrorBody = {
       error: {
         statusCode,
-        message: typeof message === 'string' ? message : JSON.stringify(message),
+        message: this.extractMessage(exception),
         path: request.url,
         correlationId: request.headers['x-correlation-id'] as string | undefined,
         timestamp: new Date().toISOString(),
@@ -56,5 +51,27 @@ export class ElyvionExceptionFilter implements ExceptionFilter {
     }
 
     response.status(statusCode).json(body);
+  }
+
+  private extractMessage(exception: unknown): string {
+    if (!(exception instanceof HttpException)) {
+      return 'Internal server error';
+    }
+    const response = exception.getResponse();
+    if (typeof response === 'string') return response;
+
+    if (response && typeof response === 'object' && 'message' in response) {
+      const { message } = response as { message: unknown };
+      if (typeof message === 'string') return message;
+      // Nest's ValidationPipe shape is string[]; ours (raw ZodIssue[] passed
+      // straight into an HttpException) is not — only join plain strings,
+      // otherwise fall through to a full JSON dump so nothing collapses to
+      // the useless "[object Object]" from Array.prototype.join.
+      if (Array.isArray(message) && message.every((m) => typeof m === 'string')) {
+        return (message as string[]).join(', ');
+      }
+    }
+
+    return JSON.stringify(response);
   }
 }

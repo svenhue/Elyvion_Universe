@@ -12,7 +12,11 @@ export type ElvButtonVariant = 'primary' | 'secondary' | 'ghost';
       [type]="type"
       (click)="pressed.emit()"
     >
-      <ng-content />
+      @if (label) {
+        {{ label }}
+      } @else {
+        <ng-content />
+      }
     </button>
   `,
   styles: [
@@ -53,5 +57,7 @@ export class ElvButtonComponent {
   @Input() variant: ElvButtonVariant = 'primary';
   @Input() disabled = false;
   @Input() type: 'button' | 'submit' = 'button';
+  /** Text content for schema-driven rendering, where there's no template to project `<ng-content>` into. */
+  @Input() label?: string;
   @Output() pressed = new EventEmitter<void>();
 }

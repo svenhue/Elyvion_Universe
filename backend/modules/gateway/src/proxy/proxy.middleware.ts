@@ -12,30 +12,40 @@ const HOP_BY_HOP_HEADERS = new Set([
   'content-length',
 ]);
 
+/** `{ moduleName: ['/sub/path', ...] }` — exact sub-paths reachable without a Bearer token (e.g. registration). */
+export type PublicRouteAllowlist = Record<string, string[]>;
+
 /**
  * Mounted at `app.use('/api', ...)`, so `req.url` has already had `/api`
  * stripped by Express. The first path segment is the target module name,
  * the rest is forwarded as-is to `{module.baseUrl}{module.routePrefix}`.
  * Every request here must carry a valid Bearer JWT, verified against the
- * Auth module's JWKS — public, unauthenticated traffic never reaches a
- * business module through the Gateway.
+ * Auth module's JWKS, EXCEPT the explicit entries in `publicRoutes` (a new
+ * account has no token yet) — those still go through the same proxy path,
+ * just without the auth check.
  */
 export function createProxyMiddleware(
   registryCache: RegistryCacheService,
   authIssuerUrl: string,
   apiAudience?: string,
+  publicRoutes: PublicRouteAllowlist = {},
 ) {
   return async function proxyMiddleware(req: Request, res: Response, _next: NextFunction) {
     const correlationId = (req.headers['x-correlation-id'] as string) || randomUUID();
 
-    try {
-      await verifyBearerToken(req.headers.authorization, authIssuerUrl, apiAudience);
-    } catch {
-      res.status(401).json({ error: { statusCode: 401, message: 'Invalid or expired token' } });
-      return;
+    const [, moduleName, ...rest] = req.url.split('?')[0].split('/');
+    const subPath = rest.length ? `/${rest.join('/')}` : '';
+
+    const isPublic = (publicRoutes[moduleName] ?? []).includes(subPath);
+    if (!isPublic) {
+      try {
+        await verifyBearerToken(req.headers.authorization, authIssuerUrl, apiAudience);
+      } catch {
+        res.status(401).json({ error: { statusCode: 401, message: 'Invalid or expired token' } });
+        return;
+      }
     }
 
-    const [, moduleName, ...rest] = req.url.split('?')[0].split('/');
     const module = registryCache.get(moduleName);
     if (!module) {
       res.status(502).json({
@@ -44,7 +54,6 @@ export function createProxyMiddleware(
       return;
     }
 
-    const subPath = rest.length ? `/${rest.join('/')}` : '';
     const query = req.url.includes('?') ? `?${req.url.split('?')[1]}` : '';
     // routePrefix "/" means "mounted at baseUrl root" — normalize so we never
     // produce a double slash in front of subPath.

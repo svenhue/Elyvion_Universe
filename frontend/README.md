@@ -23,7 +23,8 @@ npx ng serve client              # http://localhost:4200
 - **API** (`api/*`): `ApiClientService` gegen das Gateway (`/api/{modul}/...`)
 - **UI** (`ui/*`): `ElvButtonComponent`, `ElvCardComponent`
 - **Dynamic Rendering** (`dynamic-render/*`): JSON-Schema-getriebenes Rendering kompletter Angular-Anwendungen zur Laufzeit — siehe [Doku](../docs/content/dynamic-rendering.md)
+- **Auth-Pages** (`auth-pages/*`): fertige Login-/Registrierungsseiten + `elyvionAuthGuard` + `withElyvionAuthShell(routes)` — ein Aufruf richtet `/login`, `/register`, Guard und Catch-all ein. Login startet den OIDC-Flow (`AuthService.login()`); Registrierung postet direkt gegen `modules/users` (`POST /api/users/register`, am Gateway öffentlich freigeschaltet)
 
 ## client
 
-Vorlage zum Klonen pro Kundenprojekt (siehe [Best Practices](../docs/content/best-practices.md)). Enthält ein Beispiel für Login/Logout + einen Gateway-Request.
+Vorlage zum Klonen pro Kundenprojekt (siehe [Best Practices](../docs/content/best-practices.md)). `app.routes.ts` nutzt `withElyvionAuthShell([...])` — alles hinter `/` ist eingeloggt-only, `home/home.component.ts` lädt die `default`-App-Config über `DynamicAppService` und rendert sie mit `<elv-dynamic-renderer>`.

@@ -40,11 +40,23 @@ Vollständiger OpenID-Connect-Provider (`oidc-provider`), kein Eigenbau von Kryp
 - Redirect-URIs sind pro Client explizit als Allowlist registriert (`src/oidc/clients.ts`) – nicht verhandelbar zur Laufzeit
 - Access Tokens sind **selbstständige JWTs** (RFC 9068, `at+jwt`) statt opaker Referenz-Tokens – über ein Resource Indicator (RFC 8707) mit fester Audience `API_AUDIENCE` (Default `elyvion:api`), die Gateway und Module beim Verifizieren prüfen (`verifyBearerToken(..., audience)`)
 
-Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`).
+Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`). Auth hält **keine eigenen Nutzerdaten** mehr — `findAccount()` und die Credential-Prüfung beim Login rufen direkt (nicht über das Gateway) `backend/modules/users` auf; `modules/users` ist die alleinige Quelle für Nutzer/Rollen/Rechte.
 
 ### Registry (`backend/modules/registry`)
 
 Persistenter Modul-Katalog (Postgres via Prisma). Jedes Modul registriert sich beim Start selbst (`POST /modules/register`); ein Cronjob pingt alle `healthCheckUrl`s alle 30 Sekunden und aktualisiert den Status (`healthy` / `unhealthy`).
+
+### Users (`backend/modules/users`)
+
+Postgres/Prisma, einfaches RBAC-Modell (`User`/`Role`/`Permission` + Join-Tabellen). Endpunkte:
+
+- `POST /register` — **öffentlich über das Gateway** (`/api/users/register`, allowlisted in `modules/gateway`), da ein neuer Account noch kein Token hat
+- `POST /verify-credentials`, `GET /by-id/:id` — **intern**, nur von `modules/auth` direkt aufgerufen, nie über das Gateway
+- `GET/POST /roles`, `/permissions`, `POST /roles/:roleId/permissions/:permissionId`, `POST /users/:userId/roles/:roleId` — Rechteverwaltung
+
+### App-Config (`backend/modules/app-config`)
+
+MongoDB/Mongoose statt Postgres — Konfigurationen für [dynamisch gerenderte Anwendungen](/dynamic-rendering) (`DynamicAppSchema`) sind dokumentenförmig, nicht relational. `POST /schema` löst ein Schema für `applicationId`/`userId`/`settings` auf und entspricht exakt dem, was `DynamicAppService` im Frontend erwartet.
 
 ## Business-Module
 

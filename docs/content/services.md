@@ -9,7 +9,7 @@ title: Verfügbare Services
 | Export | Zweck |
 |---|---|
 | `JwtAuthGuard`, `ElyvionAuthModule.forRoot()` | Bearer-JWT-Validierung gegen das Auth-JWKS, als Nest Guard/DynamicModule |
-| `verifyBearerToken(header, issuerUrl)` | Framework-unabhängige Token-Validierung (von Gateway & Guard genutzt) |
+| `verifyBearerToken(header, issuerUrl, audience?)` | Framework-unabhängige Token-Validierung inkl. Audience-Check (von Gateway & Guard genutzt) |
 | `baseEnvSchema`, `validateEnv()` | Zod-basierte Env-Validierung |
 | `ElyvionLoggerModule.forRoot()` | Strukturiertes JSON-Logging (pino) mit `module`-Feld + Correlation-ID |
 | `ElyvionExceptionFilter` | Einheitliches Fehler-JSON-Format |
@@ -35,5 +35,7 @@ title: Verfügbare Services
 | Gateway | `3000` | Einziger öffentlicher Einstiegspunkt, Routing + Auth-Check |
 | Auth | `3011` | OIDC-Provider (Discovery, JWKS, Login/Consent) |
 | Registry | `3010` | Modul-Katalog + Health-Checks |
+| App-Config | `3012` | Dynamic-App-Schemas (MongoDB) — `POST /schema` |
+| Users | `3013` | Nutzer/Rollen/Rechte (Postgres) — `POST /register` (öffentlich), Rest intern |
 
 Live-Status aller aktuell registrierten Module: siehe [Admin-Panel](/admin).

@@ -4,6 +4,8 @@ import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
 import {
   createAuthInterceptor,
+  DYNAMIC_APP_CONFIG,
+  DYNAMIC_COMPONENT_REGISTRY,
   ELYVION_AUTH_CONFIG,
   ELYVION_GATEWAY_URL,
 } from '@elyvion/shared-lib';
@@ -31,6 +33,13 @@ export const appConfig: ApplicationConfig = {
         redirectUri: 'http://localhost:4200/auth/callback',
         postLogoutRedirectUri: 'http://localhost:4200/',
         scope: 'openid profile email offline_access',
+      },
+    },
+    { provide: DYNAMIC_APP_CONFIG, useValue: { schemaEndpoint: `${GATEWAY_URL}/api/app-config/schema` } },
+    {
+      provide: DYNAMIC_COMPONENT_REGISTRY,
+      useValue: {
+        button: () => import('@elyvion/shared-lib').then((m) => m.ElvButtonComponent),
       },
     },
   ],

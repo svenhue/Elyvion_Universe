@@ -1,0 +1,19 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
+import { ElyvionLoggerModule } from '@elyvion/shared';
+import { AppConfigsModule } from './app-configs/app-configs.module';
+import { AppController } from './app.controller';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    ElyvionLoggerModule.forRoot({ moduleName: 'app-config' }),
+    MongooseModule.forRoot(
+      process.env.MONGODB_URI ?? 'mongodb://localhost:27017/elyvion_app_config',
+    ),
+    AppConfigsModule,
+  ],
+  controllers: [AppController],
+})
+export class AppModule {}

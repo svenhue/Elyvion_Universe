@@ -5,7 +5,6 @@ import type Provider from 'oidc-provider';
 import { AppController } from './app.controller';
 import { InteractionsController } from './interactions/interactions.controller';
 import { OIDC_PROVIDER } from './oidc/oidc.constants';
-import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
 @Module({})
@@ -16,7 +15,6 @@ export class AppModule {
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
         ElyvionLoggerModule.forRoot({ moduleName: 'auth' }),
-        PrismaModule,
         UsersModule,
       ],
       controllers: [AppController, InteractionsController],

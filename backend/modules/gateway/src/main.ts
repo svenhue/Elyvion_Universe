@@ -4,7 +4,14 @@ import * as express from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { RegistryCacheService } from './registry/registry-cache.service';
-import { createProxyMiddleware } from './proxy/proxy.middleware';
+import { createProxyMiddleware, PublicRouteAllowlist } from './proxy/proxy.middleware';
+
+// New accounts have no token yet — these are the only /api/{module}{path}
+// combinations reachable without a Bearer JWT. Keep this list short and
+// explicit; everything else stays behind auth by default.
+const PUBLIC_ROUTES: PublicRouteAllowlist = {
+  users: ['/register'],
+};
 
 async function bootstrap() {
   const port = Number(process.env.PORT ?? 3000);
@@ -22,7 +29,11 @@ async function bootstrap() {
   // Our own body parser, scoped to /api — don't rely on Nest's own
   // (platform-express) body-parser having already run for raw app.use()
   // middleware registered this early in the bootstrap sequence.
-  app.use('/api', express.json(), createProxyMiddleware(registryCache, authIssuerUrl, apiAudience));
+  app.use(
+    '/api',
+    express.json(),
+    createProxyMiddleware(registryCache, authIssuerUrl, apiAudience, PUBLIC_ROUTES),
+  );
 
   await app.listen(port);
   console.log(`[gateway] listening on :${port}`);

@@ -1,7 +1,6 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
 
-export const serverRoutes: ServerRoute[] = [
-  // OAuth redirect landing page — browser-only (reads window.location, sessionStorage).
-  { path: 'auth/callback', renderMode: RenderMode.Client },
-  { path: '**', renderMode: RenderMode.Prerender },
-];
+// Every route here depends on runtime auth state and live backend data
+// (dynamic-render fetches the app schema per logged-in user) — none of it
+// is static content that can be prerendered at build time.
+export const serverRoutes: ServerRoute[] = [{ path: '**', renderMode: RenderMode.Client }];

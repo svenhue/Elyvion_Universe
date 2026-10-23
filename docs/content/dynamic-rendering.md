@@ -73,7 +73,7 @@ Einziger Einstiegspunkt des Moduls für Host-Anwendungen — löst ein Schema f�
 import { DynamicAppService, DYNAMIC_APP_CONFIG } from '@elyvion/shared-lib';
 
 // Provider, z. B. in app.config.ts:
-{ provide: DYNAMIC_APP_CONFIG, useValue: { schemaEndpoint: 'http://localhost:3000/api/app-builder/schema' } }
+{ provide: DYNAMIC_APP_CONFIG, useValue: { schemaEndpoint: 'http://localhost:3000/api/app-config/schema' } }
 
 // Nutzung:
 dynamicAppService.loadApplication({
@@ -83,4 +83,4 @@ dynamicAppService.loadApplication({
 }).subscribe((schema) => this.schema.set(schema));
 ```
 
-Das `schemaEndpoint` zeigt auf ein Backend-Modul (nach dem [Modul-Pattern](/patterns)), das Schemas pro `applicationId`/`userId`/`settings` ausliefert — dafür existiert aktuell noch kein eigenes Backend-Modul; ein `templates/module-ts`-Klon, der Schemas aus einer DB liefert, ist der naheliegende nächste Schritt.
+Das `schemaEndpoint` zeigt auf [`backend/modules/app-config`](/architecture) (NestJS + Mongoose/MongoDB), das Schemas pro `applicationId` ausliefert (`userId`/`settings` werden entgegengenommen, aber noch nicht für Personalisierung genutzt). `frontend/projects/client` ist bereits fertig damit verdrahtet: `client/src/app/app.config.ts` registriert `button` → `ElvButtonComponent`, `home/home.component.ts` rendert die per `applicationId: 'default'` geladene Schema.

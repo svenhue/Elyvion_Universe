@@ -26,5 +26,15 @@ services:
     depends_on:
       - postgres
 
+  mongo:
+    image: mongo:7
+    container_name: elyvion-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
 volumes:
   postgres-data:
+  mongo-data:

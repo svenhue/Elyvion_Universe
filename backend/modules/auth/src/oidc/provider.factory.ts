@@ -1,7 +1,7 @@
-import { PrismaClient } from '../../generated/prisma';
 import { clients } from './clients';
+import { UsersService } from '../users/users.service';
 
-const prisma = new PrismaClient();
+const usersService = new UsersService();
 
 /**
  * Single audience for every resource (Gateway + business modules) on this
@@ -28,7 +28,7 @@ export async function createOidcProvider(issuerUrl: string) {
     claims: {
       openid: ['sub'],
       email: ['email'],
-      profile: ['name'],
+      profile: ['name', 'roles'],
     },
     features: {
       devInteractions: { enabled: false },
@@ -63,12 +63,17 @@ export async function createOidcProvider(issuerUrl: string) {
       },
     },
     async findAccount(_ctx, id) {
-      const user = await prisma.user.findUnique({ where: { id } });
+      const user = await usersService.findById(id);
       if (!user) return undefined;
       return {
         accountId: user.id,
         async claims() {
-          return { sub: user.id, email: user.email, name: user.name ?? undefined };
+          return {
+            sub: user.id,
+            email: user.email,
+            name: user.name ?? undefined,
+            roles: user.roles,
+          };
         },
       };
     },

@@ -1,8 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { DynamicAppSchema } from '../schema/dynamic-app-schema';
 import { DYNAMIC_APP_CONFIG } from './dynamic-app-config';
+
+interface ResponseEnvelope<T> {
+  data: T;
+}
 
 export interface LoadApplicationOptions {
   applicationId: string;
@@ -23,10 +27,12 @@ export class DynamicAppService {
 
   loadApplication(options: LoadApplicationOptions): Observable<DynamicAppSchema> {
     const { applicationId, userId, settings } = options;
-    return this.http.post<DynamicAppSchema>(this.config.schemaEndpoint, {
-      applicationId,
-      userId,
-      settings: settings ?? {},
-    });
+    return this.http
+      .post<ResponseEnvelope<DynamicAppSchema>>(this.config.schemaEndpoint, {
+        applicationId,
+        userId,
+        settings: settings ?? {},
+      })
+      .pipe(map((response) => response.data));
   }
 }
