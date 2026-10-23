@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
 import { AppConfigsService } from './app-configs.service';
 import { resolveSchemaRequestSchema, upsertAppConfigSchema } from './dto/resolve-schema.dto';
@@ -35,5 +45,11 @@ export class AppConfigsController {
       throw new BadRequestException(parsed.error.issues);
     }
     return envelope(await this.appConfigsService.upsert(parsed.data));
+  }
+
+  @Delete('configs/:applicationId')
+  @HttpCode(204)
+  async remove(@Param('applicationId') applicationId: string) {
+    await this.appConfigsService.remove(applicationId);
   }
 }

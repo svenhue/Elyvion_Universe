@@ -15,3 +15,9 @@ export const verifyCredentialsSchema = z.object({
   password: z.string().min(1),
 });
 export type VerifyCredentialsDto = z.infer<typeof verifyCredentialsSchema>;
+
+export const updateUserSchema = z.object({
+  email: z.string().email().optional(),
+  name: z.string().min(1).optional(),
+});
+export type UpdateUserDto = z.infer<typeof updateUserSchema>;

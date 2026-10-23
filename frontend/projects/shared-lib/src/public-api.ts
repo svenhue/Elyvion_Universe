@@ -23,3 +23,11 @@ export * from './lib/auth-pages/auth.guard';
 export * from './lib/auth-pages/login-page.component';
 export * from './lib/auth-pages/register-page.component';
 export * from './lib/auth-pages/provide-elyvion-auth-routes';
+
+export * from './lib/admin/admin-resource';
+export * from './lib/admin/provide-admin-resources';
+export * from './lib/admin/admin-api.service';
+export * from './lib/admin/admin-shell.component';
+export * from './lib/admin/admin-resource-list.component';
+export * from './lib/admin/admin-resource-form.component';
+export * from './lib/admin/admin-routes';

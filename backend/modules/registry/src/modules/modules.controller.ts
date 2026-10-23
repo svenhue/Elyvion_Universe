@@ -2,9 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   NotFoundException,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
@@ -38,5 +41,21 @@ export class ModulesController {
       throw new NotFoundException(`Module "${name}" not found`);
     }
     return envelope(module);
+  }
+
+  /** Admin use (manual edits) — self-registration always goes through POST /register. */
+  @Patch(':name')
+  async update(@Param('name') name: string, @Body() body: unknown) {
+    const parsed = registerModuleSchema.partial().safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues);
+    }
+    return envelope(await this.modulesService.update(name, parsed.data));
+  }
+
+  @Delete(':name')
+  @HttpCode(204)
+  async remove(@Param('name') name: string) {
+    await this.modulesService.remove(name);
   }
 }

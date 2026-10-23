@@ -4,7 +4,7 @@
     {
       "name": "client",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd frontend && npx ng serve client --port 4200"],
+      "runtimeArgs": ["-c", "cd frontend && npm start"],
       "port": 4200
     },
     {

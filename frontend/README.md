@@ -11,11 +11,10 @@ Ein Angular-Workspace mit zwei Projekten. Details & Diagramme: [Doku-Website](..
 
 ```bash
 npm install
-npx ng build shared-lib          # einmalig / nach jeder shared-lib-Änderung — client importiert aus dist/
-npx ng serve client              # http://localhost:4200
+npm start                        # baut shared-lib, dann http://localhost:4200
 ```
 
-`shared-lib` ist über `tsconfig.json`-Pfadmapping (`@elyvion/shared-lib` → `dist/shared-lib`) eingebunden, nicht über den Dev-Server live verlinkt — nach Änderungen an der Lib muss sie neu gebaut werden.
+`shared-lib` ist über `tsconfig.json`-Pfadmapping (`@elyvion/shared-lib` → `dist/shared-lib`) eingebunden, nicht über den Dev-Server live verlinkt. `npm start`/`npm run build` bauen `shared-lib` deshalb automatisch zuerst (`npm run build:lib`) — nach Änderungen an der Lib bei laufendem `ng serve` trotzdem manuell `npm run build:lib` erneut ausführen, der Dev-Server beobachtet `dist/` nicht.
 
 ## shared-lib — Bausteine
 

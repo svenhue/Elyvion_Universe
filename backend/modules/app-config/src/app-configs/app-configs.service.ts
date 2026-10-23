@@ -46,4 +46,11 @@ export class AppConfigsService {
       })
       .lean();
   }
+
+  async remove(applicationId: string) {
+    const result = await this.model.deleteOne({ applicationId });
+    if (result.deletedCount === 0) {
+      throw new NotFoundException(`No app config for applicationId "${applicationId}"`);
+    }
+  }
 }

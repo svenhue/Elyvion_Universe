@@ -8,8 +8,10 @@ import {
   DYNAMIC_COMPONENT_REGISTRY,
   ELYVION_AUTH_CONFIG,
   ELYVION_GATEWAY_URL,
+  provideAdminResources,
 } from '@elyvion/shared-lib';
 
+import { ADMIN_RESOURCE_CONFIGS } from './admin/admin-resources';
 import { routes } from './app.routes';
 
 // Per-clone config: adjust these when cloning this app for a new customer
@@ -42,5 +44,6 @@ export const appConfig: ApplicationConfig = {
         button: () => import('@elyvion/shared-lib').then((m) => m.ElvButtonComponent),
       },
     },
+    provideAdminResources(ADMIN_RESOURCE_CONFIGS),
   ],
 };

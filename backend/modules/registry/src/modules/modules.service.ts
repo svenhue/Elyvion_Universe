@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ModuleStatus } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterModuleDto } from './register-module.dto';
@@ -32,5 +32,21 @@ export class ModulesService {
       where: { id },
       data: { status, lastSeenAt: new Date() },
     });
+  }
+
+  async update(name: string, dto: Partial<RegisterModuleDto>) {
+    const existing = await this.prisma.module.findUnique({ where: { name } });
+    if (!existing) {
+      throw new NotFoundException(`Module "${name}" not found`);
+    }
+    return this.prisma.module.update({ where: { name }, data: dto });
+  }
+
+  async remove(name: string) {
+    const existing = await this.prisma.module.findUnique({ where: { name } });
+    if (!existing) {
+      throw new NotFoundException(`Module "${name}" not found`);
+    }
+    await this.prisma.module.delete({ where: { name } });
   }
 }

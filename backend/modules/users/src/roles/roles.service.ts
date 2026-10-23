@@ -44,4 +44,46 @@ export class RolesService {
       update: {},
     });
   }
+
+  async updateRole(id: string, name: string) {
+    await this.requireRole(id);
+    return this.prisma.role.update({ where: { id }, data: { name } });
+  }
+
+  async removeRole(id: string) {
+    await this.requireRole(id);
+    await this.prisma.role.delete({ where: { id } });
+  }
+
+  async updatePermission(id: string, name: string) {
+    await this.requirePermission(id);
+    return this.prisma.permission.update({ where: { id }, data: { name } });
+  }
+
+  async removePermission(id: string) {
+    await this.requirePermission(id);
+    await this.prisma.permission.delete({ where: { id } });
+  }
+
+  async revokePermission(roleId: string, permissionId: string) {
+    await this.prisma.rolePermission
+      .delete({ where: { roleId_permissionId: { roleId, permissionId } } })
+      .catch(() => undefined);
+  }
+
+  async revokeRole(userId: string, roleId: string) {
+    await this.prisma.userRole.delete({ where: { userId_roleId: { userId, roleId } } }).catch(() => undefined);
+  }
+
+  private async requireRole(id: string) {
+    const role = await this.prisma.role.findUnique({ where: { id } });
+    if (!role) throw new NotFoundException(`Role "${id}" not found`);
+    return role;
+  }
+
+  private async requirePermission(id: string) {
+    const permission = await this.prisma.permission.findUnique({ where: { id } });
+    if (!permission) throw new NotFoundException(`Permission "${id}" not found`);
+    return permission;
+  }
 }

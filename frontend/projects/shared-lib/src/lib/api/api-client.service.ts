@@ -28,4 +28,12 @@ export class ApiClientService {
   patch<T>(moduleName: string, path: string, body: unknown) {
     return this.http.patch<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`, body);
   }
+
+  put<T>(moduleName: string, path: string, body: unknown) {
+    return this.http.put<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`, body);
+  }
+
+  delete(moduleName: string, path: string) {
+    return this.http.delete<void>(`${this.gatewayUrl}/api/${moduleName}${path}`);
+  }
 }

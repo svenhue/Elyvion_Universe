@@ -1,11 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import {
-  AuthService,
-  DynamicAppSchema,
-  DynamicAppService,
-  DynamicRendererComponent,
-  ElvButtonComponent,
-} from '@elyvion/shared-lib';
+import { AuthService, DynamicAppSchema, DynamicAppService, DynamicRendererComponent } from '@elyvion/shared-lib';
 
 /**
  * The entire app body is driven by the "default" DynamicAppSchema stored
@@ -15,13 +9,8 @@ import {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [DynamicRendererComponent, ElvButtonComponent],
+  imports: [DynamicRendererComponent],
   template: `
-    <header class="home__header">
-      <span>Angemeldet als {{ auth.claims()?.['email'] ?? auth.claims()?.['sub'] }}</span>
-      <elv-button variant="ghost" (pressed)="logout()">Abmelden</elv-button>
-    </header>
-
     <main class="home__content">
       @if (schema(); as resolved) {
         <elv-dynamic-renderer [schema]="resolved" />
@@ -34,14 +23,6 @@ import {
   `,
   styles: [
     `
-      .home__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem 1.5rem;
-        border-bottom: 1px solid #e2e8f0;
-        font-size: 0.85rem;
-      }
       .home__content {
         padding: 2rem;
       }
@@ -49,7 +30,7 @@ import {
   ],
 })
 export class HomeComponent implements OnInit {
-  protected readonly auth = inject(AuthService);
+  private readonly auth = inject(AuthService);
   private readonly dynamicAppService = inject(DynamicAppService);
 
   protected readonly schema = signal<DynamicAppSchema | null>(null);
@@ -64,9 +45,5 @@ export class HomeComponent implements OnInit {
         next: (resolved) => this.schema.set(resolved),
         error: () => this.error.set('Anwendungs-Konfiguration konnte nicht geladen werden.'),
       });
-  }
-
-  logout(): void {
-    this.auth.logout();
   }
 }

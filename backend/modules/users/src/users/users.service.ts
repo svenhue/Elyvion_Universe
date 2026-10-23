@@ -68,6 +68,29 @@ export class UsersService {
     return this.toSafeUser(user);
   }
 
+  async findAll(): Promise<SafeUser[]> {
+    const users = await this.prisma.user.findMany({
+      include: { roles: { include: { role: true } } },
+      orderBy: { email: 'asc' },
+    });
+    return users.map((u) => this.toSafeUser(u));
+  }
+
+  async update(id: string, dto: { email?: string; name?: string }): Promise<SafeUser> {
+    await this.findById(id);
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: dto,
+      include: { roles: { include: { role: true } } },
+    });
+    return this.toSafeUser(user);
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.findById(id);
+    await this.prisma.user.delete({ where: { id } });
+  }
+
   private toSafeUser(user: {
     id: string;
     email: string;

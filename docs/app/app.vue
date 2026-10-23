@@ -6,7 +6,8 @@ const navLinks = [
   { label: 'Best Practices', to: '/best-practices' },
   { label: 'Services', to: '/services' },
   { label: 'Dynamic Rendering', to: '/dynamic-rendering' },
-  { label: 'Admin', to: '/admin' },
+  { label: 'Admin-Modul', to: '/admin-module' },
+  { label: 'Admin (live)', to: '/admin' },
 ]
 </script>
 
