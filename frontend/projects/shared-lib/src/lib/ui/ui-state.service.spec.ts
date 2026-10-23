@@ -7,41 +7,37 @@ describe('ElvUiStateService', () => {
     service = new ElvUiStateService();
   });
 
-  it('publishes keyed state only to subscribers for the matching component id', () => {
-    const firstComponent: unknown[] = [];
-    const secondComponent: unknown[] = [];
+  it('isolates state between components', () => {
+    service.setState('first', 'class', 'bg-indigo-600 text-white');
 
-    service.stateChangesFor('first').subscribe((state) => firstComponent.push(state));
-    service.stateChangesFor('second').subscribe((state) => secondComponent.push(state));
-
-    service.setState('first', { key: 'class', value: 'bg-indigo-600 text-white' });
-
-    expect(firstComponent).toEqual([{ key: 'class', value: 'bg-indigo-600 text-white' }]);
-    expect(secondComponent).toEqual([]);
+    expect(service.stateSignal('first', 'class')()).toBe('bg-indigo-600 text-white');
+    expect(service.stateSignal('second', 'class')()).toBeUndefined();
   });
 
-  it('replays the latest value for each state key to late subscribers', () => {
-    service.setState('first', { key: 'value', value: 'Ada' });
-    service.setState('first', { key: 'class', value: 'font-bold' });
-    service.setState('first', { key: 'value', value: 'Grace' });
+  it('holds the latest value per key', () => {
+    service.setState('first', 'value', 'Ada');
+    service.setState('first', 'class', 'font-bold');
+    service.setState('first', 'value', 'Grace');
 
-    const states: unknown[] = [];
-    service.stateChangesFor('first').subscribe((state) => states.push(state));
-
-    expect(states).toEqual([
-      { key: 'value', value: 'Grace' },
-      { key: 'class', value: 'font-bold' },
-    ]);
+    expect(service.stateSignal('first', 'value')()).toBe('Grace');
+    expect(service.stateSignal('first', 'class')()).toBe('font-bold');
   });
 
-  it('publishes the component id and keyed state on the global stream', () => {
-    const changes: unknown[] = [];
-    service.stateChanges$.subscribe((change) => changes.push(change));
+  it('publishes every change on the lastChange signal', () => {
+    service.setState('first', 'class', 'rounded-lg');
 
-    service.setState('first', { key: 'class', value: 'rounded-lg' });
+    expect(service.lastChange()).toEqual({ componentId: 'first', key: 'class', value: 'rounded-lg' });
+  });
 
-    expect(changes).toEqual([
-      { componentId: 'first', state: { key: 'class', value: 'rounded-lg' } },
-    ]);
+  it('frees a component state slot on removeComponent, starting it fresh', () => {
+    service.setState('first', 'value', 'Ada');
+    service.removeComponent('first');
+
+    expect(service.stateSignal('first', 'value')()).toBeUndefined();
+  });
+
+  it('rejects an empty componentId or key', () => {
+    expect(() => service.setState('', 'value', 'x')).toThrow();
+    expect(() => service.setState('first', '', 'x')).toThrow();
   });
 });

@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
-import { ApiClientService, AuthService, DynamicAppService } from '@elyvion/shared-lib';
+import { ApiClientService } from '../api/api-client.service';
+import { AuthService } from '../auth/auth.service';
+import { DynamicAppService } from '../application-runner/service/dynamic-app.service';
 import { ProCodeComponent } from './pro-code.component';
 import { UI_ELEMENT_CATALOG } from './ui-element-catalog';
 

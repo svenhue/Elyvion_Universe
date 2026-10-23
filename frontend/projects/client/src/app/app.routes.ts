@@ -11,7 +11,7 @@ export const routes: Routes = [
     { path: '', component: HomeComponent },
     {
       path: 'pro-code',
-      loadComponent: () => import('./pro-code/pro-code.component').then((module) => module.ProCodeComponent),
+      loadComponent: () => import('@elyvion/shared-lib').then((module) => module.ProCodeComponent),
     },
     { path: 'admin', children: elvAdminRoutes },
   ]),

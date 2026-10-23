@@ -84,6 +84,27 @@
         <span class="text-[10px] font-medium">Verlauf</span>
       </button>
 
+      <button
+        type="button"
+        class="flex w-14 shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+        [class.bg-slate-800]="activePanel() === 'variables'"
+        [class.text-indigo-200]="activePanel() === 'variables'"
+        [attr.aria-expanded]="activePanel() === 'variables'"
+        (click)="togglePanel('variables')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          aria-hidden="true"
+        >
+          <path d="M8 4 4 12l4 8M16 4l4 8-4 8" />
+        </svg>
+        <span class="text-[10px] font-medium">Variablen</span>
+      </button>
+
       <div class="my-2 h-px w-8 shrink-0 bg-slate-800"></div>
       <button
         type="button"
@@ -145,7 +166,7 @@
     @if (activePanel() === 'elements') {
       <aside
         id="element-catalog"
-        class="flex h-full w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 sm:w-72 xl:w-80"
+        class="flex h-full w-72 max-w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 xl:w-80"
       >
         <div class="shrink-0 border-b border-slate-800 bg-slate-900 px-5 pb-4 pt-5">
           <div class="flex items-center justify-between">
@@ -316,7 +337,7 @@
     @if (activePanel() === 'schema') {
       <aside
         id="schema-panel"
-        class="flex h-full w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 sm:w-[min(42rem,calc(100vw-4.5rem))]"
+        class="flex h-full w-[32rem] max-w-[calc(100vw-4.5rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100"
       >
         <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4">
           <div>
@@ -408,7 +429,7 @@
     @if (activePanel() === 'history') {
       <aside
         id="history-panel"
-        class="flex h-full w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 sm:w-72"
+        class="flex h-full w-72 max-w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100"
       >
         <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4">
           <div>
@@ -474,10 +495,143 @@
         </div>
       </aside>
     }
+
+    @if (activePanel() === 'variables') {
+      <aside
+        id="variables-panel"
+        class="flex h-full w-80 max-w-[calc(100vw-4rem)] min-h-0 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100"
+      >
+        <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4">
+          <div>
+            <h1 class="text-sm font-semibold text-white">Variablen</h1>
+            <p class="mt-1 text-[10px] text-slate-400">{{ variables().length }} global · "$name" referenzierbar</p>
+          </div>
+          <button
+            type="button"
+            class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+            aria-label="Variablen schließen"
+            (click)="togglePanel('variables')"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-3">
+          @for (variable of variables(); track variable.name) {
+            <button
+              type="button"
+              class="mb-2 flex w-full items-start justify-between gap-2 rounded-lg border border-slate-800 p-3 text-left hover:border-indigo-400/60"
+              [class.border-indigo-500]="editingVariable() === variable.name"
+              (click)="editVariable(variable)"
+            >
+              <span class="min-w-0">
+                <span class="block truncate text-xs font-medium text-slate-100">${{ variable.name }}</span>
+                <span class="mt-0.5 block truncate text-[10px] text-slate-500">{{ variable.type }} · {{ variablePreview(variable) }}</span>
+              </span>
+              <span
+                class="shrink-0 text-[10px] text-rose-400 hover:text-rose-300"
+                (click)="$event.stopPropagation(); removeVariable(variable.name)"
+                >Löschen</span
+              >
+            </button>
+          } @empty {
+            <p class="px-2 py-6 text-center text-xs text-slate-400">Noch keine Variablen angelegt.</p>
+          }
+        </div>
+
+        <div class="shrink-0 space-y-3 border-t border-slate-800 p-3">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            {{ editingVariable() ? 'Variable bearbeiten' : 'Neue Variable' }}
+          </p>
+          <input
+            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400"
+            placeholder="Name (z. B. primaryColor)"
+            [disabled]="!!editingVariable()"
+            [ngModel]="newVariableName()"
+            (ngModelChange)="newVariableName.set($event)"
+          />
+          <select
+            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400"
+            [ngModel]="newVariableType()"
+            (change)="setNewVariableType($event)"
+          >
+            <option value="string">Text</option>
+            <option value="number">Zahl</option>
+            <option value="boolean">Boolean</option>
+            <option value="json">JSON</option>
+            <option value="list">Liste</option>
+            <option value="theme">Theme</option>
+          </select>
+
+          @if (newVariableType() === 'theme') {
+            <div class="grid grid-cols-2 gap-2">
+              @for (key of themeTokenKeys; track key) {
+                <label class="space-y-1 text-[10px] text-slate-400">
+                  {{ key }}
+                  <input
+                    type="color"
+                    class="h-8 w-full rounded-md border border-slate-700 bg-slate-950"
+                    [value]="newVariableTheme()[key]"
+                    (input)="updateThemeToken(key, $event)"
+                  />
+                </label>
+              }
+            </div>
+          } @else if (newVariableType() === 'boolean') {
+            <select
+              class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400"
+              [ngModel]="newVariableValue()"
+              (ngModelChange)="newVariableValue.set($event)"
+            >
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          } @else if (newVariableType() === 'json' || newVariableType() === 'list') {
+            <textarea
+              class="min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-[10px] text-indigo-100 outline-none focus:border-indigo-400"
+              [placeholder]="newVariableType() === 'list' ? '[]' : '{}'"
+              [ngModel]="newVariableValue()"
+              (ngModelChange)="newVariableValue.set($event)"
+            ></textarea>
+          } @else {
+            <input
+              class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400"
+              [type]="newVariableType() === 'number' ? 'number' : 'text'"
+              placeholder="Wert"
+              [ngModel]="newVariableValue()"
+              (ngModelChange)="newVariableValue.set($event)"
+            />
+          }
+
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500"
+              [disabled]="!newVariableName().trim()"
+              (click)="saveVariable()"
+            >
+              {{ editingVariable() ? 'Speichern' : 'Anlegen' }}
+            </button>
+            @if (editingVariable()) {
+              <button
+                type="button"
+                class="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800"
+                (click)="startNewVariable()"
+              >
+                Abbrechen
+              </button>
+            }
+          </div>
+          <p class="text-[10px] leading-4 text-slate-500">
+            In Properties-Feldern "$" tippen, um eine Variable einzufügen.
+          </p>
+        </div>
+      </aside>
+    }
   </div>
 
   <section
-    class="relative z-0 min-h-0 min-w-0 flex-1 overflow-hidden bg-white"
+    class="relative z-0 min-h-0 min-w-40 flex-1 overflow-hidden bg-white"
     aria-label="Anwendung"
   >
     <elv-dynamic-renderer
@@ -554,12 +708,34 @@
                   <option value="false">false</option>
                 </select>
               } @else if (entryType(entry) === 'json') {
-                <textarea
-                  class="min-h-20 w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-[10px] outline-none focus:border-indigo-400"
-                  spellcheck="false"
-                  [value]="entryValue(entry)"
-                  (change)="updateProperty(entry.key, $event)"
-                ></textarea>
+                <span class="relative block">
+                  <textarea
+                    #jsonField
+                    class="min-h-20 w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-[10px] outline-none focus:border-indigo-400"
+                    spellcheck="false"
+                    [value]="entryValue(entry)"
+                    (input)="onPropertyInput(entry.key, $event)"
+                    (blur)="closeAutocomplete()"
+                    (change)="updateProperty(entry.key, $event)"
+                  ></textarea>
+                  @if (autocompleteFieldKey() === entry.key) {
+                    <span
+                      class="absolute left-0 top-full z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+                    >
+                      @for (name of autocompleteMatches(); track name) {
+                        <button
+                          type="button"
+                          class="block w-full px-2.5 py-1.5 text-left text-[10px] text-slate-700 hover:bg-indigo-50"
+                          (mousedown)="$event.preventDefault(); applyAutocomplete(entry.key, name, jsonField)"
+                        >
+                          ${{ name }}
+                        </button>
+                      } @empty {
+                        <span class="block px-2.5 py-1.5 text-[10px] text-slate-400">Keine Variable gefunden.</span>
+                      }
+                    </span>
+                  }
+                </span>
               } @else {
                 <input
                   [type]="entryType(entry)"
@@ -575,6 +751,124 @@
             </p>
           }
         </section>
+
+        <section class="space-y-3 border-t border-slate-100 pt-4">
+          <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Event-Handler
+          </h3>
+
+          @for (entry of selectedEvents(); track entry[0]) {
+            <div class="rounded-lg border border-slate-200 p-2.5">
+              <p class="text-[10px] font-semibold text-slate-500">{{ entry[0] }}</p>
+              @for (action of entry[1]; track $index) {
+                <div class="mt-1 flex items-start justify-between gap-2">
+                  <p class="text-[10px] leading-4 text-slate-600">{{ describeAction(action) }}</p>
+                  <button
+                    type="button"
+                    class="shrink-0 text-[10px] text-rose-500 hover:text-rose-700"
+                    (click)="removeEventHandler(entry[0], $index)"
+                  >
+                    ×
+                  </button>
+                </div>
+              }
+            </div>
+          }
+
+          <div class="space-y-2 rounded-lg border border-dashed border-slate-300 p-2.5">
+            <div class="grid grid-cols-2 gap-2">
+              <label class="space-y-1 text-[10px] text-slate-500">
+                Event
+                <select
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                  [ngModel]="newHandlerEvent()"
+                  (ngModelChange)="newHandlerEvent.set($event)"
+                >
+                  <option value="click">click</option>
+                  <option value="change">change</option>
+                  <option value="input">input</option>
+                  <option value="focus">focus</option>
+                  <option value="blur">blur</option>
+                </select>
+              </label>
+              <label class="space-y-1 text-[10px] text-slate-500">
+                Aktion
+                <select
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                  [ngModel]="newHandlerActionType()"
+                  (change)="setNewHandlerActionType($event)"
+                >
+                  <option value="set-variable">Set Local Variable</option>
+                  <option value="trigger-event">Trigger Event</option>
+                  <option value="control-component">Control Component</option>
+                  <option value="run-script">Run Script</option>
+                  <option value="call-service">Call Service</option>
+                </select>
+              </label>
+            </div>
+
+            @if (newHandlerActionType() === 'set-variable') {
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                placeholder="Variablenname"
+                [ngModel]="newHandlerVariableName()"
+                (ngModelChange)="newHandlerVariableName.set($event)"
+              />
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                placeholder="Neuer Wert"
+                [ngModel]="newHandlerVariableValue()"
+                (ngModelChange)="newHandlerVariableValue.set($event)"
+              />
+            } @else if (newHandlerActionType() === 'trigger-event' || newHandlerActionType() === 'control-component') {
+              <select
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                [ngModel]="newHandlerTargetNodeId()"
+                (ngModelChange)="newHandlerTargetNodeId.set($event)"
+              >
+                <option value="">Komponente wählen …</option>
+                @for (node of otherNodes(); track node.id) {
+                  <option [value]="node.id">{{ titleFor(node) }} ({{ node.id }})</option>
+                }
+              </select>
+              @if (newHandlerActionType() === 'trigger-event') {
+                <input
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                  placeholder="Ziel-Event (Standard: click)"
+                  [ngModel]="newHandlerTargetEvent()"
+                  (ngModelChange)="newHandlerTargetEvent.set($event)"
+                />
+              } @else {
+                <input
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                  placeholder="Funktionsname (z. B. open)"
+                  [ngModel]="newHandlerFunctionName()"
+                  (ngModelChange)="newHandlerFunctionName.set($event)"
+                />
+              }
+            } @else if (newHandlerActionType() === 'run-script') {
+              <textarea
+                class="min-h-16 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[10px] outline-none focus:border-indigo-400"
+                placeholder="z. B. appState.setVariable('x', 'number', 1)"
+                [ngModel]="newHandlerScript()"
+                (ngModelChange)="newHandlerScript.set($event)"
+              ></textarea>
+            } @else if (newHandlerActionType() === 'call-service') {
+              <p class="text-[10px] text-slate-400">
+                Noch keine Services definiert — Aktion wird gespeichert, aber (noch) nicht ausgeführt.
+              </p>
+            }
+
+            <button
+              type="button"
+              class="w-full rounded-md bg-slate-800 px-2 py-1.5 text-[10px] font-medium text-white hover:bg-slate-700"
+              (click)="addEventHandler()"
+            >
+              + Handler hinzufügen
+            </button>
+          </div>
+        </section>
+
         @if (saveError()) {
           <p class="rounded-lg bg-rose-50 p-3 text-xs leading-5 text-rose-700" role="alert">
             {{ saveError() }}

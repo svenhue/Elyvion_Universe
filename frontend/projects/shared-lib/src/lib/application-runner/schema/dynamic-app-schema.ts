@@ -1,3 +1,5 @@
+import { EventHandlers } from './event-action';
+
 /**
  * Runtime representation of the JSON meta-schema in
  * `dynamic-app.schema.json`. A DynamicAppSchema describes a UI as data:
@@ -36,6 +38,8 @@ export interface DynamicComponentNode {
   attributes?: Record<string, unknown>;
   /** Ids of this node's children, rendered in order inside its element or component host. */
   children?: string[];
+  /** DOM-ish event name (e.g. "click") → actions run in order when it fires on this node. */
+  events?: EventHandlers;
 }
 
 export interface DynamicAppSchema {

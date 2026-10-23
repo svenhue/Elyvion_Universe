@@ -1,17 +1,29 @@
 import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import {
-  ApiClientService,
-  AuthService,
-  DynamicAppSchema,
-  DynamicAppService,
-  DynamicComponentNode,
-  DynamicElementDrop,
-  DynamicRendererComponent,
-  ResponseEnvelope,
-} from '@elyvion/shared-lib';
 import { EMPTY, Subject, catchError, debounceTime, map, switchMap } from 'rxjs';
+import { ApiClientService, ResponseEnvelope } from '../api/api-client.service';
+import { AuthService } from '../auth/auth.service';
+import { DynamicRendererComponent, DynamicElementDrop } from '../application-runner/rendering/dynamic-renderer.component';
+import { DynamicAppSchema, DynamicComponentNode } from '../application-runner/schema/dynamic-app-schema';
+import { EventAction, EventActionType } from '../application-runner/schema/event-action';
+import { DynamicAppService } from '../application-runner/service/dynamic-app.service';
+import { AppStateService } from '../application-runner/state/app-state.service';
+import { AppVariable, AppVariableType } from '../application-runner/state/app-variable';
 import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
+
+const THEME_TOKEN_KEYS = ['primary', 'secondary', 'background', 'surface', 'text', 'accent'] as const;
+type ThemeTokenKey = (typeof THEME_TOKEN_KEYS)[number];
+type ThemeValue = Record<ThemeTokenKey, string>;
+
+const DEFAULT_THEME: ThemeValue = {
+  primary: '#4f46e5',
+  secondary: '#64748b',
+  background: '#ffffff',
+  surface: '#f8fafc',
+  text: '#0f172a',
+  accent: '#3b82f6',
+};
 
 const EMPTY_SCHEMA: DynamicAppSchema = {
   id: 'default',
@@ -55,14 +67,15 @@ interface PreviewRequest {
 }
 
 @Component({
-  selector: 'app-pro-code',
+  selector: 'elv-pro-code',
   standalone: true,
-  imports: [DynamicRendererComponent, RouterLink],
+  imports: [DynamicRendererComponent, RouterLink, FormsModule],
   templateUrl: './pro-code.component.html',
 })
 export class ProCodeComponent implements OnInit, OnDestroy {
   readonly elements = UI_ELEMENT_CATALOG;
-  readonly activePanel = signal<'elements' | 'schema' | 'history' | null>(null);
+  readonly themeTokenKeys = THEME_TOKEN_KEYS;
+  readonly activePanel = signal<'elements' | 'schema' | 'history' | 'variables' | null>(null);
   readonly searchTerm = signal('');
   readonly schemaCode = signal(JSON.stringify(EMPTY_SCHEMA, null, 2));
   readonly schemaError = signal('');
@@ -101,6 +114,41 @@ export class ProCodeComponent implements OnInit, OnDestroy {
       .map(([key, value]) => ({ key, value }));
   });
   readonly selectedPosition = computed(() => this.selectedNode()?.position ?? { x: 0, y: 0 });
+  readonly selectedEvents = computed<[string, EventAction[]][]>(
+    () => Object.entries(this.selectedNode()?.events ?? {}),
+  );
+
+  readonly newHandlerEvent = signal('click');
+  readonly newHandlerActionType = signal<EventActionType>('set-variable');
+  readonly newHandlerVariableName = signal('');
+  readonly newHandlerVariableValue = signal('');
+  readonly newHandlerTargetNodeId = signal('');
+  readonly newHandlerTargetEvent = signal('click');
+  readonly newHandlerFunctionName = signal('');
+  readonly newHandlerScript = signal('');
+
+  readonly otherNodes = computed(() =>
+    this.previewSchema().components.filter((node) => node.id !== this.selectedId()),
+  );
+
+  protected readonly appState = inject(AppStateService);
+  readonly variables = this.appState.variables$;
+  readonly newVariableName = signal('');
+  readonly newVariableType = signal<AppVariableType>('string');
+  readonly newVariableValue = signal('');
+  readonly newVariableTheme = signal<ThemeValue>({ ...DEFAULT_THEME });
+  readonly editingVariable = signal<string | null>(null);
+
+  /** `$`-autocomplete while typing in a JSON property/style field. */
+  readonly autocompleteFieldKey = signal<string | null>(null);
+  readonly autocompleteQuery = signal('');
+  readonly autocompleteMatches = computed(() => {
+    const query = this.autocompleteQuery().toLocaleLowerCase('de');
+    return this.appState
+      .variableNames()
+      .filter((name) => name.toLocaleLowerCase('de').includes(query))
+      .slice(0, 8);
+  });
 
   private readonly auth = inject(AuthService);
   private readonly dynamicAppService = inject(DynamicAppService);
@@ -174,8 +222,203 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     this.previewRequests.complete();
   }
 
-  togglePanel(panel: 'elements' | 'schema' | 'history'): void {
+  togglePanel(panel: 'elements' | 'schema' | 'history' | 'variables'): void {
     this.activePanel.update((active) => active === panel ? null : panel);
+  }
+
+  // --- Global variables (left sidebar "Variablen" panel) ---
+
+  startNewVariable(): void {
+    this.editingVariable.set(null);
+    this.newVariableName.set('');
+    this.newVariableType.set('string');
+    this.newVariableValue.set('');
+    this.newVariableTheme.set({ ...DEFAULT_THEME });
+  }
+
+  editVariable(variable: AppVariable): void {
+    this.editingVariable.set(variable.name);
+    this.newVariableName.set(variable.name);
+    this.newVariableType.set(variable.type);
+    if (variable.type === 'theme') {
+      this.newVariableTheme.set({ ...DEFAULT_THEME, ...(variable.value as Partial<ThemeValue>) });
+    } else {
+      this.newVariableValue.set(
+        typeof variable.value === 'object' ? JSON.stringify(variable.value) : String(variable.value ?? ''),
+      );
+    }
+  }
+
+  setNewVariableType(event: Event): void {
+    if (event.target instanceof HTMLSelectElement) {
+      this.newVariableType.set(event.target.value as AppVariableType);
+    }
+  }
+
+  updateThemeToken(key: ThemeTokenKey, event: Event): void {
+    if (event.target instanceof HTMLInputElement) {
+      this.newVariableTheme.update((theme) => ({ ...theme, [key]: event.target instanceof HTMLInputElement ? event.target.value : theme[key] }));
+    }
+  }
+
+  saveVariable(): void {
+    const name = this.newVariableName().trim();
+    if (!name) return;
+
+    const type = this.newVariableType();
+    let value: unknown;
+    switch (type) {
+      case 'theme':
+        value = this.newVariableTheme();
+        break;
+      case 'number':
+        value = Number(this.newVariableValue()) || 0;
+        break;
+      case 'boolean':
+        value = this.newVariableValue() === 'true';
+        break;
+      case 'json':
+      case 'list':
+        try {
+          value = JSON.parse(this.newVariableValue() || (type === 'list' ? '[]' : '{}'));
+        } catch {
+          this.schemaError.set('Variable: ungültiges JSON.');
+          return;
+        }
+        break;
+      default:
+        value = this.newVariableValue();
+    }
+
+    this.appState.setVariable(name, type, value);
+    this.startNewVariable();
+  }
+
+  removeVariable(name: string): void {
+    this.appState.removeVariable(name);
+    if (this.editingVariable() === name) {
+      this.startNewVariable();
+    }
+  }
+
+  variablePreview(variable: AppVariable): string {
+    return typeof variable.value === 'object' ? JSON.stringify(variable.value) : String(variable.value);
+  }
+
+  // --- `$`-autocomplete for JSON property/style fields ---
+
+  onPropertyInput(key: string, event: Event): void {
+    if (!(event.target instanceof HTMLTextAreaElement)) return;
+    const { value, selectionStart } = event.target;
+    const uptoCursor = value.slice(0, selectionStart ?? value.length);
+    const match = /\$([\w-]*)$/.exec(uptoCursor);
+    if (match) {
+      this.autocompleteFieldKey.set(key);
+      this.autocompleteQuery.set(match[1]);
+    } else {
+      this.autocompleteFieldKey.set(null);
+    }
+  }
+
+  applyAutocomplete(key: string, name: string, textarea: HTMLTextAreaElement): void {
+    const cursor = textarea.selectionStart ?? textarea.value.length;
+    const before = textarea.value.slice(0, cursor).replace(/\$([\w-]*)$/, `$${name}`);
+    const after = textarea.value.slice(cursor);
+    const updated = before + after;
+    textarea.value = updated;
+    this.autocompleteFieldKey.set(null);
+    this.updateProperty(key, { target: textarea } as unknown as Event);
+  }
+
+  closeAutocomplete(): void {
+    this.autocompleteFieldKey.set(null);
+  }
+
+  // --- Event handlers (right sidebar, selected element) ---
+
+  setNewHandlerActionType(event: Event): void {
+    if (event.target instanceof HTMLSelectElement) {
+      this.newHandlerActionType.set(event.target.value as EventActionType);
+    }
+  }
+
+  addEventHandler(): void {
+    const eventName = this.newHandlerEvent().trim();
+    if (!eventName) return;
+
+    const type = this.newHandlerActionType();
+    let action: EventAction;
+    switch (type) {
+      case 'set-variable':
+        if (!this.newHandlerVariableName().trim()) return;
+        action = {
+          type,
+          variableName: this.newHandlerVariableName().trim(),
+          variableValue: this.coerceActionValue(this.newHandlerVariableValue()),
+        };
+        break;
+      case 'trigger-event':
+        if (!this.newHandlerTargetNodeId()) return;
+        action = { type, targetNodeId: this.newHandlerTargetNodeId(), targetEvent: this.newHandlerTargetEvent().trim() || 'click' };
+        break;
+      case 'control-component':
+        if (!this.newHandlerTargetNodeId() || !this.newHandlerFunctionName().trim()) return;
+        action = { type, targetComponentId: this.newHandlerTargetNodeId(), functionName: this.newHandlerFunctionName().trim() };
+        break;
+      case 'run-script':
+        if (!this.newHandlerScript().trim()) return;
+        action = { type, script: this.newHandlerScript() };
+        break;
+      case 'call-service':
+        action = { type };
+        break;
+    }
+
+    this.updateSelectedNode((node) => {
+      const events = { ...(node.events ?? {}) };
+      events[eventName] = [...(events[eventName] ?? []), action];
+      node.events = events;
+    });
+
+    this.newHandlerVariableName.set('');
+    this.newHandlerVariableValue.set('');
+    this.newHandlerFunctionName.set('');
+    this.newHandlerScript.set('');
+  }
+
+  removeEventHandler(eventName: string, index: number): void {
+    this.updateSelectedNode((node) => {
+      const events = { ...(node.events ?? {}) };
+      const actions = (events[eventName] ?? []).filter((_, i) => i !== index);
+      if (actions.length) {
+        events[eventName] = actions;
+      } else {
+        delete events[eventName];
+      }
+      node.events = events;
+    });
+  }
+
+  describeAction(action: EventAction): string {
+    switch (action.type) {
+      case 'set-variable':
+        return `Setze $${action.variableName} = ${JSON.stringify(action.variableValue)}`;
+      case 'trigger-event':
+        return `Löst "${action.targetEvent}" auf ${action.targetNodeId} aus`;
+      case 'control-component':
+        return `Ruft ${action.functionName}() auf ${action.targetComponentId} auf`;
+      case 'run-script':
+        return 'Führt Skript aus';
+      case 'call-service':
+        return 'Service aufrufen (noch nicht implementiert)';
+    }
+  }
+
+  private coerceActionValue(raw: string): unknown {
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    if (raw !== '' && !Number.isNaN(Number(raw))) return Number(raw);
+    return raw;
   }
 
   search(event: Event): void {

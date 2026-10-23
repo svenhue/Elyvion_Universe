@@ -12,13 +12,24 @@ export interface ElvButtonProperties extends ElvUiProperties {
   label?: string;
 }
 
+const VARIANT_CLASSES: Record<ElvButtonVariant, string> = {
+  primary: 'bg-indigo-600 text-white hover:bg-indigo-700',
+  secondary: 'bg-slate-200 text-slate-900 hover:bg-slate-300',
+  ghost: 'bg-transparent border border-slate-300 text-current hover:bg-slate-50',
+};
+
 @Component({
   selector: 'elv-button',
   standalone: true,
   imports: [CommonModule],
   template: `
     <button
-      [class]="'elv-button elv-button--' + (properties.variant ?? variant) + ' ' + (properties.className ?? '')"
+      [class]="
+        'font-sans font-semibold rounded-lg px-4 py-2 border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ' +
+        variantClass() +
+        ' ' +
+        (properties.className ?? '')
+      "
       [ngStyle]="properties.styles"
       [disabled]="properties.disabled ?? disabled"
       [type]="properties.type ?? type"
@@ -31,39 +42,6 @@ export interface ElvButtonProperties extends ElvUiProperties {
       }
     </button>
   `,
-  styles: [
-    `
-      .elv-button {
-        font-family: inherit;
-        font-weight: 600;
-        border-radius: 8px;
-        padding: 0.55rem 1.1rem;
-        border: 1px solid transparent;
-        cursor: pointer;
-        transition: background-color 0.15s ease;
-      }
-      .elv-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      .elv-button--primary {
-        background: #6366f1;
-        color: #fff;
-      }
-      .elv-button--primary:not(:disabled):hover {
-        background: #4f46e5;
-      }
-      .elv-button--secondary {
-        background: #e2e8f0;
-        color: #0f172a;
-      }
-      .elv-button--ghost {
-        background: transparent;
-        border-color: #cbd5e1;
-        color: inherit;
-      }
-    `,
-  ],
 })
 export class ElvButtonComponent extends ElvStatefulUiComponent {
   @Input() properties: ElvButtonProperties = {};
@@ -73,4 +51,8 @@ export class ElvButtonComponent extends ElvStatefulUiComponent {
   /** Text content for schema-driven rendering, where there's no template to project `<ng-content>` into. */
   @Input() label?: string;
   @Output() pressed = new EventEmitter<void>();
+
+  protected variantClass(): string {
+    return VARIANT_CLASSES[this.properties.variant ?? this.variant] + (this.variant === 'ghost' || this.properties.variant === 'ghost' ? '' : ' border-transparent');
+  }
 }

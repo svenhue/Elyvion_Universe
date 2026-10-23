@@ -1,45 +1,30 @@
-import { Directive, DestroyRef, HostBinding, inject, Input, OnInit } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ElvUiState, ElvUiStateService } from './ui-state.service';
+import { Directive, HostBinding, Input, OnDestroy, inject } from '@angular/core';
+import { ElvUiStateService } from './ui-state.service';
 
 @Directive()
-export abstract class ElvStatefulUiComponent implements OnInit {
+export abstract class ElvStatefulUiComponent implements OnDestroy {
   @Input() componentId = '';
 
-  @HostBinding('class') stateClass = '';
-
-  private readonly stateValues = new Map<string, unknown>();
-
   private readonly stateService = inject(ElvUiStateService);
-  private readonly destroyRef = inject(DestroyRef);
 
-  ngOnInit(): void {
-    if (!this.componentId) {
-      return;
-    }
-
-    this.stateService
-      .stateChangesFor(this.componentId)
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe((state) => {
-        this.stateValues.set(state.key, state.value);
-        if (state.key === 'class') {
-          this.stateClass = typeof state.value === 'string' ? state.value : '';
-        }
-      });
+  @HostBinding('class')
+  protected get stateClass(): string {
+    return this.componentId ? (this.stateService.stateSignal<string>(this.componentId, 'class')() ?? '') : '';
   }
 
-  protected stateValue(key: string): unknown {
-    return this.stateValues.get(key);
+  ngOnDestroy(): void {
+    if (this.componentId) {
+      this.stateService.removeComponent(this.componentId);
+    }
+  }
+
+  protected stateValue<T = unknown>(key: string): T | undefined {
+    return this.componentId ? this.stateService.stateSignal<T>(this.componentId, key)() : undefined;
   }
 
   protected updateState<T>(key: string, value: T): void {
-    const state: ElvUiState<T> = { key, value };
-    this.stateValues.set(key, value);
     if (this.componentId) {
-      this.stateService.setState(this.componentId, state);
+      this.stateService.setState(this.componentId, key, value);
     }
   }
 }

@@ -12,30 +12,18 @@ export interface ElvCardProperties extends ElvUiProperties {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="elv-card" [ngClass]="properties.className" [ngStyle]="properties.styles">
+    <div
+      [class]="'rounded-xl border border-slate-200 bg-white p-5 ' + (properties.className ?? '')"
+      [ngStyle]="properties.styles"
+    >
       @if (properties.title ?? title) {
-        <h3 class="elv-card__title">{{ properties.title ?? title }}</h3>
+        <h3 class="m-0 mb-3 text-base font-semibold">{{ properties.title ?? title }}</h3>
       }
-      <div class="elv-card__body">
+      <div>
         <ng-content />
       </div>
     </div>
   `,
-  styles: [
-    `
-      .elv-card {
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1.25rem;
-        background: #fff;
-      }
-      .elv-card__title {
-        margin: 0 0 0.75rem;
-        font-size: 1rem;
-        font-weight: 600;
-      }
-    `,
-  ],
 })
 export class ElvCardComponent extends ElvStatefulUiComponent {
   @Input() properties: ElvCardProperties = {};
