@@ -1,0 +1,20 @@
+// Custom output path: pnpm dedupes identical @prisma/client versions across
+// workspace packages into one physical copy, so the default (shared)
+// output location gets overwritten by whichever module generates last.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+}

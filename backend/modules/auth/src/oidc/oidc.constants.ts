@@ -1,0 +1,1 @@
+export const OIDC_PROVIDER = 'OIDC_PROVIDER';

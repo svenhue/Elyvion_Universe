@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elyvion.dev/schemas/dynamic-app.schema.json",
+  "title": "DynamicAppSchema",
+  "description": "Meta-schema describing an Angular application as data, so it can be rendered at runtime by @elyvion/shared-lib's dynamic-render module instead of being compiled per customer.",
+  "type": "object",
+  "required": ["id", "name", "version", "rootComponentId", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Application id, matches the applicationId passed into DynamicAppService.loadApplication()."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable application name."
+    },
+    "version": {
+      "type": "string",
+      "description": "Schema/application version, e.g. for cache-busting or migration logic."
+    },
+    "rootComponentId": {
+      "type": "string",
+      "description": "Id of the component node in `components` to start rendering from."
+    },
+    "components": {
+      "type": "array",
+      "description": "Flat list of every component instance in the application. Hierarchy is expressed via each node's `children` (a list of ids), not by nesting objects.",
+      "items": { "$ref": "#/$defs/component" }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique id of this component instance within the schema."
+        },
+        "name": {
+          "type": "string",
+          "description": "Logical component type name, resolved at runtime against the host app's component registry and lazily loaded (code-split) on first use."
+        },
+        "attributes": {
+          "type": "object",
+          "description": "Arbitrary attributes for this instance. The reserved key `style` is applied to the host element's CSS; every other key becomes a component @Input().",
+          "properties": {
+            "style": {
+              "type": "object",
+              "description": "CSS property name → value map (e.g. SCSS-computed values), applied directly to the rendered component's host element.",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "additionalProperties": true
+        },
+        "children": {
+          "type": "array",
+          "description": "Ids of this node's children, rendered in order inside the renderer's own container.",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

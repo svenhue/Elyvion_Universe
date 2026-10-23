@@ -22,6 +22,7 @@ node_modules/
 
 # Prisma
 **/prisma/*.db
+**/generated/prisma/
 
 # OS / editor
 .DS_Store

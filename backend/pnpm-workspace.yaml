@@ -1,0 +1,10 @@
+packages:
+  - "modules/*"
+  - "templates/module-ts"
+  - "packages/shared-ts"
+
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
+  - "@swc/core"
+  - "prisma"
