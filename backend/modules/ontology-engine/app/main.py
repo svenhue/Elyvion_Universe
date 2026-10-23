@@ -1,24 +1,44 @@
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
 from elyvion_shared import (
     RegisterModuleOptions,
     configure_logging,
+    get_logger,
     install_exception_handlers,
     register_module,
 )
 
 from .config import settings
-from .db import connect, disconnect
+from .db import connect, disconnect, session_scope
+from .environment import service as environment_service
+from .environment.router import router as environment_router
 from .ontologies.router import router as ontologies_router
 
 configure_logging(settings.module_name, settings.environment)
+logger = get_logger(__name__)
+
+scheduler = AsyncIOScheduler()
+
+
+async def _tick_environment_sync() -> None:
+    async with session_scope() as session:
+        current = await environment_service.get_settings(session)
+        if not current.enabled:
+            return
+        try:
+            await environment_service.sync_environment(session)
+        except Exception as error:  # the tick must survive one bad sync to try again later
+            logger.error("environment_sync_failed", error=str(error))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect()
+    scheduler.add_job(_tick_environment_sync, "interval", seconds=30, id="environment-sync")
+    scheduler.start()
     await register_module(
         RegisterModuleOptions(
             registry_url=settings.registry_url,
@@ -31,12 +51,14 @@ async def lifespan(app: FastAPI):
         )
     )
     yield
+    scheduler.shutdown(wait=False)
     await disconnect()
 
 
 app = FastAPI(title=settings.module_name, lifespan=lifespan)
 install_exception_handlers(app)
 app.include_router(ontologies_router)
+app.include_router(environment_router)
 
 
 @app.get("/health")

@@ -33,12 +33,31 @@ from serving other requests.
 property values can't be nested objects, so this isn't a simplification,
 it's the actual constraint the graph itself has.
 
+Ontologies also carry a `type` — which template/vocabulary an ontology
+follows (e.g. `"angular_app_config"`, `"elyvion_platform_environment"`,
+`"custom"`). Node/edge creation is upsert (Cypher `MERGE`, keyed by an
+optional caller-supplied node `id`, or by the `(source, target, type)`
+tuple for edges) — what lets a sync job call this repeatedly without
+duplicating what it already created.
+
+## `app/environment` — the platform "observer"
+
+A submodule, not a separate service: mirrors the running Elyvion
+platform itself (every module registered with the Registry, plus a
+small static list of frontend apps — there's no self-registration story
+for those yet) into its own `"elyvion_platform_environment"` ontology,
+on an optional 30s background tick. Settings (on/off) persist in Neo4j
+as a tiny singleton node, so they survive a restart. See
+`PlatformEnvironmentSettingsComponent` (frontend `admin` → "Platform-
+Umgebung") for the on/off toggle and manual "sync now".
+
 ## Endpoints
 
 - `POST/GET /ontologies`, `GET/DELETE /ontologies/{key}`
 - `GET /ontologies/{key}/graph` — the whole graph in one call, for the frontend's graph view
 - `POST/GET /ontologies/{key}/nodes`, `GET/PATCH/DELETE /ontologies/{key}/nodes/{id}`
 - `POST/GET /ontologies/{key}/edges`, `PATCH/DELETE /ontologies/{key}/edges/{id}`
+- `GET/PUT /environment/settings`, `POST /environment/sync`
 
 ## Local dev
 

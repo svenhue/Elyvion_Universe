@@ -70,3 +70,5 @@ export * from './lib/pro-code/pro-code.component';
 export * from './lib/ontology-engine/ontology-schema';
 export * from './lib/ontology-engine/ontology-api.service';
 export * from './lib/ontology-engine/ontology-engine.component';
+export * from './lib/ontology-engine/platform-environment-api.service';
+export * from './lib/ontology-engine/platform-environment-settings.component';

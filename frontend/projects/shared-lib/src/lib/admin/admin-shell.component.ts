@@ -20,6 +20,9 @@ import { ADMIN_RESOURCES } from './admin-resource';
             {{ resource.label }}
           </a>
         }
+        <a [routerLink]="['platform-environment']" routerLinkActive="elv-admin__nav-link--active">
+          Platform-Umgebung
+        </a>
       </nav>
       <main class="elv-admin__content">
         <router-outlet />

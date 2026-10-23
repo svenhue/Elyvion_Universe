@@ -8,6 +8,7 @@ whole reason to exist is fast graph reads/writes, so this isn't optional.
 """
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession
 
@@ -31,6 +32,14 @@ async def disconnect() -> None:
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
+    assert _driver is not None, "Neo4j driver not initialized — connect() wasn't awaited at startup"
+    async with _driver.session() as session:
+        yield session
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """Same as `get_session`, usable outside FastAPI's `Depends` — for the environment sync's background scheduler job, which isn't handling a request."""
     assert _driver is not None, "Neo4j driver not initialized — connect() wasn't awaited at startup"
     async with _driver.session() as session:
         yield session
