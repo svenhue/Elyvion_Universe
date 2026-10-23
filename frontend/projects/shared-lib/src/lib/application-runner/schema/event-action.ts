@@ -4,7 +4,13 @@
  * registry yet to target, so wiring it up is future work; everything
  * else here actually executes (see DynamicRendererComponent.runAction()).
  */
-export type EventActionType = 'set-variable' | 'trigger-event' | 'control-component' | 'run-script' | 'call-service';
+export type EventActionType =
+  | 'set-variable'
+  | 'trigger-event'
+  | 'control-component'
+  | 'run-script'
+  | 'call-service'
+  | 'run-workflow';
 
 export interface EventAction {
   type: EventActionType;
@@ -31,6 +37,12 @@ export interface EventAction {
   script?: string;
   /** call-service — not executed yet, see the type doc above. */
   serviceName?: string;
+  /**
+   * run-workflow — key of a `WorkflowDefinition`. Runs on `WorkflowRunnerService`
+   * (`target: "frontend"`) or is forwarded to the backend workflow-engine
+   * module (`target: "backend"`), looked up by `workflowKey` at run time.
+   */
+  workflowKey?: string;
 }
 
 /** A node's `events` map: DOM-ish event name → actions run in order when it fires. */

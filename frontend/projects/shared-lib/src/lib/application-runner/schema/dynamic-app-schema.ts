@@ -21,7 +21,13 @@ export interface DynamicComponentNode {
   element?: string;
   /** Text content, required when `type` is `text`. */
   text?: string;
-  /** Absolute coordinates within the rendered application root. */
+  /**
+   * `x`/`y`/`zIndex` only take effect when this node opts into absolute
+   * placement (`style.position` / `properties.styles.position` is
+   * `"absolute"` or `"fixed"`, see {@link isAbsolutelyPositioned}).
+   * Otherwise the node renders in normal document flow and only `order`
+   * is used, to sort it among its siblings.
+   */
   position?: {
     x: number;
     y: number;
@@ -50,4 +56,28 @@ export interface DynamicAppSchema {
   /** Id of the node to start rendering from. */
   rootComponentId: string;
   components: DynamicComponentNode[];
+}
+
+/**
+ * Whether `node` has explicitly opted into absolute/fixed placement via its
+ * style properties. Everything else renders in normal flow by default —
+ * see {@link DynamicComponentNode.position}.
+ */
+export function isAbsolutelyPositioned(node: DynamicComponentNode): boolean {
+  const attributes = node.attributes;
+  if (!attributes) return false;
+  const elementStyle = attributes['style'];
+  const properties = attributes['properties'];
+  const componentStyles =
+    properties && typeof properties === 'object' && !Array.isArray(properties)
+      ? (properties as Record<string, unknown>)['styles']
+      : undefined;
+  const styleSource =
+    elementStyle && typeof elementStyle === 'object'
+      ? elementStyle
+      : componentStyles && typeof componentStyles === 'object'
+        ? componentStyles
+        : undefined;
+  const position = (styleSource as Record<string, unknown> | undefined)?.['position'];
+  return position === 'absolute' || position === 'fixed';
 }

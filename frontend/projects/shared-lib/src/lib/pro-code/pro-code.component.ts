@@ -5,25 +5,13 @@ import { EMPTY, Subject, catchError, debounceTime, map, switchMap } from 'rxjs';
 import { ApiClientService, ResponseEnvelope } from '../api/api-client.service';
 import { AuthService } from '../auth/auth.service';
 import { DynamicRendererComponent, DynamicElementDrop } from '../application-runner/rendering/dynamic-renderer.component';
-import { DynamicAppSchema, DynamicComponentNode } from '../application-runner/schema/dynamic-app-schema';
+import { DynamicAppSchema, DynamicComponentNode, isAbsolutelyPositioned } from '../application-runner/schema/dynamic-app-schema';
 import { EventAction, EventActionType } from '../application-runner/schema/event-action';
 import { DynamicAppService } from '../application-runner/service/dynamic-app.service';
 import { AppStateService } from '../application-runner/state/app-state.service';
 import { AppVariable, AppVariableType } from '../application-runner/state/app-variable';
 import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
-
-const THEME_TOKEN_KEYS = ['primary', 'secondary', 'background', 'surface', 'text', 'accent'] as const;
-type ThemeTokenKey = (typeof THEME_TOKEN_KEYS)[number];
-type ThemeValue = Record<ThemeTokenKey, string>;
-
-const DEFAULT_THEME: ThemeValue = {
-  primary: '#4f46e5',
-  secondary: '#64748b',
-  background: '#ffffff',
-  surface: '#f8fafc',
-  text: '#0f172a',
-  accent: '#3b82f6',
-};
+import { ElvVariableAutocompleteDirective } from './variable-autocomplete.directive';
 
 const EMPTY_SCHEMA: DynamicAppSchema = {
   id: 'default',
@@ -69,12 +57,11 @@ interface PreviewRequest {
 @Component({
   selector: 'elv-pro-code',
   standalone: true,
-  imports: [DynamicRendererComponent, RouterLink, FormsModule],
+  imports: [DynamicRendererComponent, RouterLink, FormsModule, ElvVariableAutocompleteDirective],
   templateUrl: './pro-code.component.html',
 })
 export class ProCodeComponent implements OnInit, OnDestroy {
   readonly elements = UI_ELEMENT_CATALOG;
-  readonly themeTokenKeys = THEME_TOKEN_KEYS;
   readonly activePanel = signal<'elements' | 'schema' | 'history' | 'variables' | null>(null);
   readonly searchTerm = signal('');
   readonly schemaCode = signal(JSON.stringify(EMPTY_SCHEMA, null, 2));
@@ -113,7 +100,6 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     return Object.entries(values)
       .map(([key, value]) => ({ key, value }));
   });
-  readonly selectedPosition = computed(() => this.selectedNode()?.position ?? { x: 0, y: 0 });
   readonly selectedEvents = computed<[string, EventAction[]][]>(
     () => Object.entries(this.selectedNode()?.events ?? {}),
   );
@@ -126,6 +112,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   readonly newHandlerTargetEvent = signal('click');
   readonly newHandlerFunctionName = signal('');
   readonly newHandlerScript = signal('');
+  readonly newHandlerWorkflowKey = signal('');
 
   readonly otherNodes = computed(() =>
     this.previewSchema().components.filter((node) => node.id !== this.selectedId()),
@@ -136,19 +123,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   readonly newVariableName = signal('');
   readonly newVariableType = signal<AppVariableType>('string');
   readonly newVariableValue = signal('');
-  readonly newVariableTheme = signal<ThemeValue>({ ...DEFAULT_THEME });
   readonly editingVariable = signal<string | null>(null);
-
-  /** `$`-autocomplete while typing in a JSON property/style field. */
-  readonly autocompleteFieldKey = signal<string | null>(null);
-  readonly autocompleteQuery = signal('');
-  readonly autocompleteMatches = computed(() => {
-    const query = this.autocompleteQuery().toLocaleLowerCase('de');
-    return this.appState
-      .variableNames()
-      .filter((name) => name.toLocaleLowerCase('de').includes(query))
-      .slice(0, 8);
-  });
 
   private readonly auth = inject(AuthService);
   private readonly dynamicAppService = inject(DynamicAppService);
@@ -233,31 +208,20 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     this.newVariableName.set('');
     this.newVariableType.set('string');
     this.newVariableValue.set('');
-    this.newVariableTheme.set({ ...DEFAULT_THEME });
   }
 
   editVariable(variable: AppVariable): void {
     this.editingVariable.set(variable.name);
     this.newVariableName.set(variable.name);
     this.newVariableType.set(variable.type);
-    if (variable.type === 'theme') {
-      this.newVariableTheme.set({ ...DEFAULT_THEME, ...(variable.value as Partial<ThemeValue>) });
-    } else {
-      this.newVariableValue.set(
-        typeof variable.value === 'object' ? JSON.stringify(variable.value) : String(variable.value ?? ''),
-      );
-    }
+    this.newVariableValue.set(
+      typeof variable.value === 'object' ? JSON.stringify(variable.value) : String(variable.value ?? ''),
+    );
   }
 
   setNewVariableType(event: Event): void {
     if (event.target instanceof HTMLSelectElement) {
       this.newVariableType.set(event.target.value as AppVariableType);
-    }
-  }
-
-  updateThemeToken(key: ThemeTokenKey, event: Event): void {
-    if (event.target instanceof HTMLInputElement) {
-      this.newVariableTheme.update((theme) => ({ ...theme, [key]: event.target instanceof HTMLInputElement ? event.target.value : theme[key] }));
     }
   }
 
@@ -268,9 +232,6 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     const type = this.newVariableType();
     let value: unknown;
     switch (type) {
-      case 'theme':
-        value = this.newVariableTheme();
-        break;
       case 'number':
         value = Number(this.newVariableValue()) || 0;
         break;
@@ -287,6 +248,9 @@ export class ProCodeComponent implements OnInit, OnDestroy {
         }
         break;
       default:
+        // 'string' and 'theme' both hold a single scalar value — a theme
+        // variable is just a color, so other variables can reference it
+        // directly (`$accent`) instead of reaching into a nested object.
         value = this.newVariableValue();
     }
 
@@ -303,35 +267,6 @@ export class ProCodeComponent implements OnInit, OnDestroy {
 
   variablePreview(variable: AppVariable): string {
     return typeof variable.value === 'object' ? JSON.stringify(variable.value) : String(variable.value);
-  }
-
-  // --- `$`-autocomplete for JSON property/style fields ---
-
-  onPropertyInput(key: string, event: Event): void {
-    if (!(event.target instanceof HTMLTextAreaElement)) return;
-    const { value, selectionStart } = event.target;
-    const uptoCursor = value.slice(0, selectionStart ?? value.length);
-    const match = /\$([\w-]*)$/.exec(uptoCursor);
-    if (match) {
-      this.autocompleteFieldKey.set(key);
-      this.autocompleteQuery.set(match[1]);
-    } else {
-      this.autocompleteFieldKey.set(null);
-    }
-  }
-
-  applyAutocomplete(key: string, name: string, textarea: HTMLTextAreaElement): void {
-    const cursor = textarea.selectionStart ?? textarea.value.length;
-    const before = textarea.value.slice(0, cursor).replace(/\$([\w-]*)$/, `$${name}`);
-    const after = textarea.value.slice(cursor);
-    const updated = before + after;
-    textarea.value = updated;
-    this.autocompleteFieldKey.set(null);
-    this.updateProperty(key, { target: textarea } as unknown as Event);
-  }
-
-  closeAutocomplete(): void {
-    this.autocompleteFieldKey.set(null);
   }
 
   // --- Event handlers (right sidebar, selected element) ---
@@ -372,6 +307,10 @@ export class ProCodeComponent implements OnInit, OnDestroy {
       case 'call-service':
         action = { type };
         break;
+      case 'run-workflow':
+        if (!this.newHandlerWorkflowKey().trim()) return;
+        action = { type, workflowKey: this.newHandlerWorkflowKey().trim() };
+        break;
     }
 
     this.updateSelectedNode((node) => {
@@ -384,6 +323,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     this.newHandlerVariableValue.set('');
     this.newHandlerFunctionName.set('');
     this.newHandlerScript.set('');
+    this.newHandlerWorkflowKey.set('');
   }
 
   removeEventHandler(eventName: string, index: number): void {
@@ -411,6 +351,8 @@ export class ProCodeComponent implements OnInit, OnDestroy {
         return 'Führt Skript aus';
       case 'call-service':
         return 'Service aufrufen (noch nicht implementiert)';
+      case 'run-workflow':
+        return `Startet Workflow "${action.workflowKey}"`;
     }
   }
 
@@ -448,7 +390,13 @@ export class ProCodeComponent implements OnInit, OnDestroy {
       if (!node || node.id === schema.rootComponentId) {
         return;
       }
-      node.position = { ...node.position, x: drop.x, y: drop.y };
+      if (isAbsolutelyPositioned(node)) {
+        // Opted into free placement via styles — drag just moves it by pixel.
+        node.position = { ...node.position, x: drop.x, y: drop.y };
+      } else {
+        // Normal flow: dragging reorders the node among its siblings.
+        this.reorderChildren(schema, node.id, drop.insertBeforeNodeId);
+      }
       this.selectedId.set(node.id);
       this.writeSchema(schema);
       return;
@@ -458,7 +406,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     if (!definition) {
       return;
     }
-    this.insertElement(schema, definition, drop.x, drop.y);
+    this.insertElement(schema, definition, drop.x, drop.y, drop.insertBeforeNodeId);
   }
 
   addElement(element: UiElementDefinition): void {
@@ -469,7 +417,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     if (!schema) {
       return;
     }
-    this.insertElement(schema, element, 144, 96);
+    this.insertElement(schema, element, 0, 0);
   }
 
   selectNode(id: string): void {
@@ -516,20 +464,6 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     this.validateSchema(code);
   }
 
-  updatePosition(axis: 'x' | 'y', event: Event): void {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) {
-      return;
-    }
-    this.updateSelectedNode((node) => {
-      node.position = {
-        x: node.position?.x ?? 0,
-        y: node.position?.y ?? 0,
-        ...node.position,
-        [axis]: target.valueAsNumber || 0,
-      };
-    });
-  }
 
   updateProperty(key: string, event: Event): void {
     const target = event.target;
@@ -639,24 +573,62 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     }
   }
 
-  private insertElement(schema: DynamicAppSchema, element: UiElementDefinition, x: number, y: number): void {
+  private insertElement(
+    schema: DynamicAppSchema,
+    element: UiElementDefinition,
+    x: number,
+    y: number,
+    insertBeforeNodeId?: string,
+  ): void {
     const root = schema.components.find((node) => node.id === schema.rootComponentId);
     if (!root) {
       this.schemaError.set('Das rootComponentId verweist auf kein vorhandenes Schema-Element.');
       return;
     }
     const id = `${element.name}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-    const order = Math.max(0, ...schema.components.map((node) => node.position?.order ?? 0)) + 1;
+    // Rendered in normal document flow by default — `x`/`y` are only ever
+    // used once this node's styles opt into `position: absolute`/`fixed`.
     schema.components.push({
       id,
       type: 'component',
       name: element.name,
       attributes: { properties: defaultProperties(element.name) },
-      position: { x, y, order, zIndex: order },
+      position: { x, y, order: 0 },
+      children: [],
     });
     root.children = [...(root.children ?? []), id];
+    this.reorderChildren(schema, id, insertBeforeNodeId);
     this.selectedId.set(id);
     this.writeSchema(schema);
+  }
+
+  /**
+   * Moves `movingId` to just before `insertBeforeNodeId` among its
+   * parent's children (or to the end, when omitted), then renumbers every
+   * sibling's `position.order` so document flow and `order` stay in sync.
+   * `movingId`'s parent is found by searching `children` rather than
+   * passed in, since the canvas only supports dropping onto the root.
+   */
+  private reorderChildren(schema: DynamicAppSchema, movingId: string, insertBeforeNodeId?: string): void {
+    const parent = schema.components.find((node) => node.children?.includes(movingId));
+    if (!parent?.children) {
+      return;
+    }
+    const siblings = parent.children.filter((id) => id !== movingId);
+    const insertIndex = insertBeforeNodeId ? siblings.indexOf(insertBeforeNodeId) : -1;
+    if (insertIndex === -1) {
+      siblings.push(movingId);
+    } else {
+      siblings.splice(insertIndex, 0, movingId);
+    }
+    parent.children = siblings;
+
+    siblings.forEach((id, index) => {
+      const node = schema.components.find((candidate) => candidate.id === id);
+      if (node) {
+        node.position = { ...node.position, x: node.position?.x ?? 0, y: node.position?.y ?? 0, order: index + 1 };
+      }
+    });
   }
 
   private updateSelectedNode(update: (node: DynamicComponentNode) => void): void {

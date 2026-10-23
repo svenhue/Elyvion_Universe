@@ -1,0 +1,92 @@
+// Custom output path: pnpm dedupes identical @prisma/client versions across
+// workspace packages into one physical copy, so the default (shared)
+// output location gets overwritten by whichever module generates last.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A stored workflow graph (its steps + edges), versioned so a running
+/// instance always keeps executing against the definition it started
+/// with, even if the workflow is edited afterwards.
+model WorkflowDefinition {
+  id        String         @id @default(uuid())
+  key       String
+  version   Int            @default(1)
+  name      String
+  /// "frontend" | "backend" — which engine executes it. Frontend workflows
+  /// are only ever stored here for the builder UI/history; the browser's
+  /// WorkflowRunnerService (XState) is the one that actually interprets them.
+  target    String
+  /// The step graph: { startStepId, steps: WorkflowStep[] } — see the
+  /// frontend's `workflow-schema.ts`, which this mirrors field-for-field.
+  definition Json
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  runs      WorkflowRun[]
+
+  @@unique([key, version])
+  @@index([key])
+}
+
+enum WorkflowRunStatus {
+  pending
+  running
+  succeeded
+  failed
+  compensated
+}
+
+/// One execution of a WorkflowDefinition — the transaction boundary: every
+/// step it took is recorded in WorkflowStepRun, so a run's outcome (and
+/// how it got there) is always reconstructable, and a failed run can be
+/// retried or compensated from its last durable checkpoint.
+model WorkflowRun {
+  id           String            @id @default(uuid())
+  workflowId   String
+  workflow     WorkflowDefinition @relation(fields: [workflowId], references: [id])
+  status       WorkflowRunStatus @default(pending)
+  /// This run's own isolated context/state (separate from any caller's
+  /// global state) — the accumulated output of each step as it completes.
+  context      Json              @default("{}")
+  error        String?
+  startedAt    DateTime          @default(now())
+  finishedAt   DateTime?
+  steps        WorkflowStepRun[]
+
+  @@index([workflowId])
+  @@index([status])
+}
+
+enum WorkflowStepStatus {
+  pending
+  running
+  succeeded
+  failed
+  compensated
+  skipped
+}
+
+/// The durable record of one step's attempt within a run — the
+/// "transaction log" a saga-style compensation flow replays: on failure,
+/// steps already marked `succeeded` are compensated in reverse order.
+model WorkflowStepRun {
+  id         String             @id @default(uuid())
+  runId      String
+  run        WorkflowRun        @relation(fields: [runId], references: [id])
+  stepId     String
+  status     WorkflowStepStatus @default(pending)
+  attempt    Int                @default(1)
+  input      Json?
+  output     Json?
+  error      String?
+  startedAt  DateTime           @default(now())
+  finishedAt DateTime?
+
+  @@index([runId])
+}

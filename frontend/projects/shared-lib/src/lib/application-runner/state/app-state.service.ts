@@ -1,5 +1,5 @@
 import { Injectable, Signal, WritableSignal, computed, signal } from '@angular/core';
-import { AppVariable, AppVariableType } from './app-variable';
+import { AppVariable, AppVariableType, DEFAULT_THEME_VARIABLES } from './app-variable';
 
 /**
  * The application's global variable store — the "import a REST dataset as
@@ -19,6 +19,12 @@ import { AppVariable, AppVariableType } from './app-variable';
 export class AppStateService {
   private readonly variables = new Map<string, WritableSignal<AppVariable>>();
   private readonly namesSignal = signal<string[]>([]);
+
+  constructor() {
+    for (const theme of DEFAULT_THEME_VARIABLES) {
+      this.setVariable(theme.name, 'theme', theme.value);
+    }
+  }
 
   /** Variable names, for the sidebar list and the `$`-autocomplete. */
   readonly variableNames: Signal<string[]> = this.namesSignal.asReadonly();

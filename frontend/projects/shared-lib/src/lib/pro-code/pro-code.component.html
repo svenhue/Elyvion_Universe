@@ -564,18 +564,19 @@
           </select>
 
           @if (newVariableType() === 'theme') {
-            <div class="grid grid-cols-2 gap-2">
-              @for (key of themeTokenKeys; track key) {
-                <label class="space-y-1 text-[10px] text-slate-400">
-                  {{ key }}
-                  <input
-                    type="color"
-                    class="h-8 w-full rounded-md border border-slate-700 bg-slate-950"
-                    [value]="newVariableTheme()[key]"
-                    (input)="updateThemeToken(key, $event)"
-                  />
-                </label>
-              }
+            <div class="flex items-center gap-2">
+              <input
+                type="color"
+                class="h-8 w-12 shrink-0 rounded-md border border-slate-700 bg-slate-950"
+                [ngModel]="newVariableValue() || '#4f46e5'"
+                (ngModelChange)="newVariableValue.set($event)"
+              />
+              <input
+                class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400"
+                placeholder="#4f46e5"
+                [ngModel]="newVariableValue()"
+                (ngModelChange)="newVariableValue.set($event)"
+              />
             </div>
           } @else if (newVariableType() === 'boolean') {
             <select
@@ -662,34 +663,6 @@
         </button>
       </div>
       <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-        <section class="space-y-3">
-          <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Position
-          </h3>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="space-y-1 text-xs text-slate-600"
-              >X
-              <input
-                type="number"
-                class="w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-xs outline-none focus:border-indigo-400"
-                [value]="selectedPosition().x"
-                (change)="updatePosition('x', $event)"
-              />
-            </label>
-            <label class="space-y-1 text-xs text-slate-600"
-              >Y
-              <input
-                type="number"
-                class="w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-xs outline-none focus:border-indigo-400"
-                [value]="selectedPosition().y"
-                (change)="updatePosition('y', $event)"
-              />
-            </label>
-          </div>
-          <p class="text-[10px] leading-4 text-slate-400">
-            Elemente lassen sich direkt in der Anwendung verschieben.
-          </p>
-        </section>
 
         <section class="space-y-3">
           <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -708,36 +681,16 @@
                   <option value="false">false</option>
                 </select>
               } @else if (entryType(entry) === 'json') {
-                <span class="relative block">
-                  <textarea
-                    #jsonField
-                    class="min-h-20 w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-[10px] outline-none focus:border-indigo-400"
-                    spellcheck="false"
-                    [value]="entryValue(entry)"
-                    (input)="onPropertyInput(entry.key, $event)"
-                    (blur)="closeAutocomplete()"
-                    (change)="updateProperty(entry.key, $event)"
-                  ></textarea>
-                  @if (autocompleteFieldKey() === entry.key) {
-                    <span
-                      class="absolute left-0 top-full z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
-                    >
-                      @for (name of autocompleteMatches(); track name) {
-                        <button
-                          type="button"
-                          class="block w-full px-2.5 py-1.5 text-left text-[10px] text-slate-700 hover:bg-indigo-50"
-                          (mousedown)="$event.preventDefault(); applyAutocomplete(entry.key, name, jsonField)"
-                        >
-                          ${{ name }}
-                        </button>
-                      } @empty {
-                        <span class="block px-2.5 py-1.5 text-[10px] text-slate-400">Keine Variable gefunden.</span>
-                      }
-                    </span>
-                  }
-                </span>
+                <textarea
+                  elvVariableAutocomplete
+                  class="min-h-20 w-full rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-[10px] outline-none focus:border-indigo-400"
+                  spellcheck="false"
+                  [value]="entryValue(entry)"
+                  (change)="updateProperty(entry.key, $event)"
+                ></textarea>
               } @else {
                 <input
+                  elvVariableAutocomplete
                   [type]="entryType(entry)"
                   class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs outline-none focus:border-indigo-400"
                   [value]="entryValue(entry)"
@@ -803,6 +756,7 @@
                   <option value="control-component">Control Component</option>
                   <option value="run-script">Run Script</option>
                   <option value="call-service">Call Service</option>
+                  <option value="run-workflow">Run Workflow</option>
                 </select>
               </label>
             </div>
@@ -857,6 +811,13 @@
               <p class="text-[10px] text-slate-400">
                 Noch keine Services definiert — Aktion wird gespeichert, aber (noch) nicht ausgeführt.
               </p>
+            } @else if (newHandlerActionType() === 'run-workflow') {
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-indigo-400"
+                placeholder="Workflow-Key"
+                [ngModel]="newHandlerWorkflowKey()"
+                (ngModelChange)="newHandlerWorkflowKey.set($event)"
+              />
             }
 
             <button

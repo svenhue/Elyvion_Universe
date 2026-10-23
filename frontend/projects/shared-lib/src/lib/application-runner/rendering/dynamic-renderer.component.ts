@@ -18,10 +18,13 @@ import {
   ViewRef,
 } from '@angular/core';
 import { DYNAMIC_COMPONENT_REGISTRY } from '../registry/dynamic-component-registry';
-import { DynamicAppSchema, DynamicComponentNode } from '../schema/dynamic-app-schema';
+import { DynamicAppSchema, DynamicComponentNode, isAbsolutelyPositioned } from '../schema/dynamic-app-schema';
 import { EventAction } from '../schema/event-action';
 import { AppStateService } from '../state/app-state.service';
 import { parseVariableReference } from '../state/app-variable';
+import { ApiClientService } from '../../api/api-client.service';
+import { WorkflowDefinitionRegistryService } from '../workflow/workflow-definition-registry.service';
+import { WorkflowRunnerService } from '../workflow/workflow-runner.service';
 
 interface RenderSession {
   views: ViewRef[];
@@ -37,6 +40,14 @@ export interface DynamicElementDrop {
   y: number;
   nodeId?: string;
   componentName?: string;
+  /**
+   * Id of the sibling to insert/move the dropped node before, based on
+   * where the pointer landed among the root's direct children.
+   * `undefined` means "insert at the end". Used for normal document-flow
+   * placement; a node that opts into absolute positioning ignores this and
+   * uses `x`/`y` instead.
+   */
+  insertBeforeNodeId?: string;
 }
 
 /**
@@ -59,6 +70,9 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
   private readonly applicationRef = inject(ApplicationRef);
   private readonly document = inject(DOCUMENT);
   private readonly appState = inject(AppStateService);
+  private readonly api = inject(ApiClientService);
+  private readonly workflowDefinitions = inject(WorkflowDefinitionRegistryService);
+  private readonly workflowRunner = inject(WorkflowRunnerService);
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement;
   private activeSession?: RenderSession;
   private renderVersion = 0;
@@ -191,6 +205,18 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
           hostElement.className = resolved;
         } else {
           componentRef.setInput(key, resolved);
+          // Every component gets `properties.styles` applied to its host
+          // element here, generically — not every UI-library component
+          // reads it itself (only a few do, e.g. `ElvButtonComponent`'s
+          // own `[ngStyle]`), so this is what makes the pro-code editor's
+          // "styles" property actually take effect on any component, not
+          // just the ones that happened to opt in.
+          if (key === 'properties' && resolved && typeof resolved === 'object') {
+            const styles = (resolved as Record<string, unknown>)['styles'];
+            if (styles && typeof styles === 'object') {
+              this.applyStyle(hostElement, styles as Record<string, unknown>);
+            }
+          }
         }
         componentRef.changeDetectorRef.detectChanges();
       });
@@ -250,6 +276,7 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
         y: Math.max(0, Math.round(event.clientY - bounds.top)),
         nodeId,
         componentName,
+        insertBeforeNodeId: this.findInsertionSibling(element, event.clientY, nodeId),
       });
     });
     element.addEventListener('click', (event) => {
@@ -261,6 +288,26 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
         }
       }
     });
+  }
+
+  /**
+   * Finds which direct child of `root` the pointer (at `clientY`) is
+   * above, so a flow-positioned drop can insert/move the node right
+   * before it instead of just appending it at the end. Compares against
+   * each sibling's vertical midpoint; `excludeNodeId` skips the node
+   * being dragged itself, when repositioning an existing one.
+   */
+  private findInsertionSibling(root: HTMLElement, clientY: number, excludeNodeId?: string): string | undefined {
+    for (const child of Array.from(root.children)) {
+      if (!(child instanceof HTMLElement)) continue;
+      const id = child.dataset['elvNodeId'];
+      if (!id || id === excludeNodeId) continue;
+      const rect = child.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        return id;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -370,6 +417,24 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
       case 'call-service':
         console.warn('[DynamicRenderer] call-service is not implemented yet — no service registry to target.');
         return;
+      case 'run-workflow': {
+        if (!action.workflowKey) return;
+        const definition = this.workflowDefinitions.get(action.workflowKey);
+        if (definition?.target === 'frontend') {
+          this.workflowRunner.run(definition).then((result) => {
+            if (result.status === 'failed') {
+              console.error(`[DynamicRenderer] workflow "${action.workflowKey}" failed:`, result.error);
+            }
+          });
+        } else {
+          // No local definition (or it's `target: "backend"`) — ask the
+          // workflow-engine module to run it by key instead.
+          this.api.post('workflow-engine', `/definitions/${action.workflowKey}/run`, {}).subscribe({
+            error: (error: unknown) => console.error(`[DynamicRenderer] workflow "${action.workflowKey}" failed:`, error),
+          });
+        }
+        return;
+      }
     }
   }
 
@@ -390,7 +455,7 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
         }
       });
     }
-    if (node.position) {
+    if (node.position && isAbsolutelyPositioned(node)) {
       element.style.position = 'absolute';
       element.style.left = `${node.position.x}px`;
       element.style.top = `${node.position.y}px`;

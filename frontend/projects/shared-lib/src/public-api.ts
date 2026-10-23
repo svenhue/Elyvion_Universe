@@ -44,6 +44,9 @@ export * from './lib/application-runner/service/dynamic-app-config';
 export * from './lib/application-runner/service/dynamic-app.service';
 export * from './lib/application-runner/state/app-state.service';
 export * from './lib/application-runner/state/app-variable';
+export * from './lib/application-runner/workflow/workflow-schema';
+export * from './lib/application-runner/workflow/workflow-runner.service';
+export * from './lib/application-runner/workflow/workflow-definition-registry.service';
 
 export * from './lib/auth-pages/auth.guard';
 export * from './lib/auth-pages/login-page.component';

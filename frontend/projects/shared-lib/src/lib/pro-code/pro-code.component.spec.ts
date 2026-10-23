@@ -41,12 +41,33 @@ describe('ProCodeComponent', () => {
     expect(component.previewSchema().components).toEqual(schema.components);
   });
 
-  it('moves a component when dropped at a new application position', () => {
+  it('reorders a flow-positioned component when dropped before a sibling, instead of moving it by pixel', () => {
+    component.handleElementDrop({ componentName: 'button', x: 0, y: 0 });
+    const first = component.configuredElements().find((element) => element.name === 'button');
+    if (!first) throw new Error('First button not found.');
+    component.handleElementDrop({ componentName: 'card', x: 0, y: 0 });
+    const second = component.configuredElements().find((element) => element.name === 'card');
+    if (!second) throw new Error('Second element (card) not found.');
+
+    // Drop the button back before the card — should reorder, not set x/y.
+    component.handleElementDrop({ nodeId: first.id, x: 999, y: 999, insertBeforeNodeId: second.id });
+
+    const root = component.previewSchema().components.find((node) => node.id === component.previewSchema().rootComponentId);
+    expect(root?.children).toEqual([first.id, second.id]);
+    const moved = component.previewSchema().components.find((node) => node.id === first.id);
+    expect(moved?.position?.x).not.toBe(999);
+  });
+
+  it('moves an absolutely-positioned component to the drop location by pixel', () => {
     component.handleElementDrop({ componentName: 'button', x: 50, y: 60 });
     const added = component.configuredElements().find((element) => element.name === 'button');
     if (!added) {
       throw new Error('Added button not found in configured elements.');
     }
+    component.selectedId.set(added.id);
+    component.updateProperty('styles', {
+      target: Object.assign(document.createElement('textarea'), { value: '{"position":"absolute"}' }),
+    } as unknown as Event);
 
     component.handleElementDrop({ nodeId: added.id, x: 250, y: 180 });
 
