@@ -40,6 +40,29 @@ optional caller-supplied node `id`, or by the `(source, target, type)`
 tuple for edges) — what lets a sync job call this repeatedly without
 duplicating what it already created.
 
+### Vocabulary per ontology type
+
+`"custom"` ontologies are free-form — whoever edits them picks their own
+node/edge types. The two built-in, auto-synced types are not: each has a
+single, fixed relationship so a reader can tell what an edge means from
+its type string alone, without having to read the sync code that
+produced it.
+
+- **`angular_app_config`** — root node type `AngularApplication`;
+  every other node is one of the app's own elements/components. The one
+  edge type is **`ist_element`**, always parent → child (root → its
+  top-level element, element → its children) — "is an element of" reads
+  the same way regardless of which level it's at, so there's no need for
+  a second edge type just to name the root→element case differently.
+- **`elyvion_platform_environment`** — root node type
+  `EnvironmentInstance`, named `"environment"`; every other node is a
+  `BackendService` or `FrontendApp`. The one edge type is
+  **`läuft_in`** ("runs in"), always service → environment — a service
+  runs *in* the environment, not the other way round, so the arrow
+  points from the thing that depends on the environment to the
+  environment itself, the same direction `ist_element` points from the
+  more specific thing to the more general one.
+
 ## `app/environment` — the platform "observer"
 
 A submodule, not a separate service: mirrors the running Elyvion

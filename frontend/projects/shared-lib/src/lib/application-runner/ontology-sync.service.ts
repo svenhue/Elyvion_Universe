@@ -10,7 +10,7 @@ import { DynamicAppSchema, DynamicComponentNode } from './schema/dynamic-app-sch
  * (see `OntologyType`'s doc comment). Root node is the application
  * itself (`AngularApplication`); every schema component becomes a node
  * of its own (keyed by that component's own `id`, not a generated one),
- * connected by `"contains"` edges that mirror the schema's parent/child
+ * connected by `"ist_element"` edges that mirror the schema's parent/child
  * tree — so calling this again after an edit upserts the same nodes and
  * edges (see the backend's `create_node`/`create_edge`, both MERGE-based)
  * instead of growing a second copy of the app next to the first.
@@ -22,6 +22,9 @@ import { DynamicAppSchema, DynamicComponentNode } from './schema/dynamic-app-sch
 @Injectable({ providedIn: 'root' })
 export class AppOntologySyncService {
   private readonly ontologyApi = inject(OntologyApiService);
+
+  /** The `angular_app_config` ontology type's one relationship: parent → child, whether the parent is the application root or another element. */
+  private static readonly EDGE_IS_ELEMENT = 'ist_element';
 
   async sync(applicationId: string, schema: DynamicAppSchema): Promise<void> {
     const key = ontologyKeyFor(applicationId);
@@ -49,12 +52,18 @@ export class AppOntologySyncService {
     }
 
     await firstValueFrom(
-      this.ontologyApi.createEdge(key, { source_id: rootNodeId, target_id: schema.rootComponentId, type: 'root' }),
+      this.ontologyApi.createEdge(key, {
+        source_id: rootNodeId,
+        target_id: schema.rootComponentId,
+        type: AppOntologySyncService.EDGE_IS_ELEMENT,
+      }),
     );
 
     for (const node of schema.components) {
       for (const childId of node.children ?? []) {
-        await firstValueFrom(this.ontologyApi.createEdge(key, { source_id: node.id, target_id: childId, type: 'contains' }));
+        await firstValueFrom(
+          this.ontologyApi.createEdge(key, { source_id: node.id, target_id: childId, type: AppOntologySyncService.EDGE_IS_ELEMENT }),
+        );
       }
     }
   }

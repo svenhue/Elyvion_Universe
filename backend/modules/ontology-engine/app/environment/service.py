@@ -5,11 +5,11 @@ comment on `create_node`/`create_edge` for why re-running this safely
 upserts instead of duplicating).
 
 Lives as a submodule of `ontology-engine` rather than a separate module:
-observing the platform *is* graph-shaped data (environment → services,
-services → each other later), so it belongs with the engine that already
-knows how to store and query that shape — a dedicated "observer" module
-would just be this same logic talking to this same API over HTTP instead
-of calling it directly.
+observing the platform *is* graph-shaped data (services → environment via
+"läuft_in", services → each other later), so it belongs with the engine
+that already knows how to store and query that shape — a dedicated
+"observer" module would just be this same logic talking to this same API
+over HTTP instead of calling it directly.
 """
 
 import os
@@ -31,6 +31,11 @@ _REGISTRY_URL = os.getenv("REGISTRY_URL", "http://localhost:3010")
 # a comma-separated `name=baseUrl` list via FRONTEND_APPS if the platform
 # grows more than the one `client` app.
 _DEFAULT_FRONTEND_APPS = "client=http://localhost:4200"
+
+# The `elyvion_platform_environment` ontology type's one relationship: a
+# running service runs *in* the environment, so the edge points from the
+# service to the root, not the other way round.
+_EDGE_RUNS_IN = "läuft_in"
 
 
 def _frontend_apps() -> list[tuple[str, str]]:
@@ -79,7 +84,7 @@ async def sync_environment(session: AsyncSession) -> EnvironmentSyncResult:
     await ontologies.create_node(
         session,
         ONTOLOGY_KEY,
-        OntologyNodeCreate(id=ROOT_NODE_ID, type="EnvironmentInstance", name="local", attributes={}, x=320, y=20),
+        OntologyNodeCreate(id=ROOT_NODE_ID, type="EnvironmentInstance", name="environment", attributes={}, x=320, y=20),
     )
     node_count = 1
     edge_count = 0
@@ -95,7 +100,7 @@ async def sync_environment(session: AsyncSession) -> EnvironmentSyncResult:
             OntologyNodeCreate(id=node_id, type="BackendService", name=name, attributes=attributes, x=x, y=y),
         )
         await ontologies.create_edge(
-            session, ONTOLOGY_KEY, OntologyEdgeCreate(source_id=ROOT_NODE_ID, target_id=node_id, type="contains")
+            session, ONTOLOGY_KEY, OntologyEdgeCreate(source_id=node_id, target_id=ROOT_NODE_ID, type=_EDGE_RUNS_IN)
         )
         node_count += 1
         edge_count += 1
@@ -110,7 +115,7 @@ async def sync_environment(session: AsyncSession) -> EnvironmentSyncResult:
             OntologyNodeCreate(id=node_id, type="FrontendApp", name=name, attributes={"baseUrl": base_url}, x=x, y=y),
         )
         await ontologies.create_edge(
-            session, ONTOLOGY_KEY, OntologyEdgeCreate(source_id=ROOT_NODE_ID, target_id=node_id, type="contains")
+            session, ONTOLOGY_KEY, OntologyEdgeCreate(source_id=node_id, target_id=ROOT_NODE_ID, type=_EDGE_RUNS_IN)
         )
         node_count += 1
         edge_count += 1
