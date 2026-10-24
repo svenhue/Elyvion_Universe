@@ -1,0 +1,113 @@
+<button
+  type="button"
+  class="fixed bottom-6 right-6 z-50 grid size-14 place-items-center rounded-xl bg-indigo-600 text-white shadow-lg transition hover:bg-indigo-500"
+  (click)="toggle()"
+>
+  <svg viewBox="0 0 24 24" fill="currentColor" class="size-6">
+    <path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z" />
+  </svg>
+</button>
+
+@if (isOpen()) {
+  <div
+    class="fixed z-50 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+    [style.left.px]="position().x"
+    [style.top.px]="position().y"
+    [style.width.px]="size().width"
+    [style.height.px]="size().height"
+  >
+    <div
+      class="flex shrink-0 cursor-move items-center justify-between bg-slate-950 px-3 py-2 text-sm text-white"
+      (pointerdown)="startDrag($event)"
+      (pointermove)="onDragMove($event)"
+      (pointerup)="endDrag()"
+    >
+      <span class="font-medium">Assistent</span>
+      <button type="button" class="text-slate-400 hover:text-white" (click)="close()">×</button>
+    </div>
+
+    <div class="flex min-h-0 flex-1">
+      <nav class="flex w-28 shrink-0 flex-col gap-1 border-r border-slate-100 bg-slate-50 p-2 text-xs">
+        <button
+          type="button"
+          class="rounded-md px-2 py-1.5 text-left font-medium"
+          [class.bg-indigo-100]="activeTab() === 'chat'"
+          [class.text-indigo-700]="activeTab() === 'chat'"
+          [class.text-slate-600]="activeTab() !== 'chat'"
+          (click)="selectTab('chat')"
+        >Chat</button>
+        <button
+          type="button"
+          class="rounded-md px-2 py-1.5 text-left font-medium"
+          [class.bg-indigo-100]="activeTab() === 'actions'"
+          [class.text-indigo-700]="activeTab() === 'actions'"
+          [class.text-slate-600]="activeTab() !== 'actions'"
+          (click)="selectTab('actions')"
+        >Actions</button>
+      </nav>
+
+      <div class="min-h-0 flex-1 overflow-y-auto p-3">
+        @if (activeTab() === 'chat') {
+          <p class="text-xs text-slate-400">Chat folgt in der nächsten Phase.</p>
+        } @else {
+          @if (actionsError()) {
+            <p class="mb-2 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700">{{ actionsError() }}</p>
+          }
+          <div class="mb-3 space-y-1">
+            @for (action of actions(); track action.key) {
+              <button
+                type="button"
+                class="flex w-full flex-col items-start gap-0.5 rounded-md border px-2 py-1.5 text-left text-xs"
+                [class.border-indigo-400]="selectedAction()?.key === action.key"
+                [class.border-slate-200]="selectedAction()?.key !== action.key"
+                (click)="selectAction(action)"
+              >
+                <span class="font-medium text-slate-800">{{ action.name }}</span>
+                <span class="text-[10px] text-slate-400">{{ action.key }} · {{ action.target }}</span>
+              </button>
+            } @empty {
+              <p class="text-xs text-slate-400">Keine Actions gefunden.</p>
+            }
+          </div>
+
+          @if (selectedAction(); as action) {
+            <div class="space-y-2 border-t border-slate-100 pt-3">
+              <p class="text-[11px] text-slate-500">{{ action.description }}</p>
+              @for (field of formFields(); track field.key) {
+                <label class="block space-y-1 text-[10px] text-slate-500">
+                  {{ field.key }}{{ field.required ? ' *' : '' }}
+                  <input
+                    class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs outline-none focus:border-indigo-400"
+                    [ngModel]="field.value"
+                    (ngModelChange)="updateField(field.key, $event)"
+                  />
+                </label>
+              }
+              <button
+                type="button"
+                class="w-full rounded-md bg-indigo-600 px-2 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                [disabled]="running()"
+                (click)="runSelectedAction()"
+              >{{ running() ? 'Läuft…' : 'Ausführen' }}</button>
+
+              @if (runResult(); as result) {
+                @if (result.success) {
+                  <pre class="overflow-x-auto rounded-md bg-emerald-50 p-2 text-[10px] text-emerald-800">{{ result.output | json }}</pre>
+                } @else {
+                  <p class="rounded-md bg-rose-50 p-2 text-[10px] text-rose-700">{{ result.error }}</p>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+    </div>
+
+    <div
+      class="absolute bottom-0 right-0 size-4 cursor-nwse-resize"
+      (pointerdown)="startResize($event)"
+      (pointermove)="onResizeMove($event)"
+      (pointerup)="endResize()"
+    ></div>
+  </div>
+}

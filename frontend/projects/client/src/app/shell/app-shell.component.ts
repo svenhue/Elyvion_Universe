@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { FrontendActionsService } from '@elyvion/shared-lib';
+import { AssistantWidgetComponent, FrontendActionsService } from '@elyvion/shared-lib';
 
 /**
  * Persistent left-hand nav (Home / App-Builder / Workflows / Ontologien)
@@ -11,13 +11,13 @@ import { FrontendActionsService } from '@elyvion/shared-lib';
  *
  * Also the one component mounted on every page — the natural place to
  * register this app's frontend actions once, on boot (see
- * `FrontendActionsService.registerBuiltins()`), and later to host the
- * floating assistant panel.
+ * `FrontendActionsService.registerBuiltins()`) and to host the floating
+ * assistant widget, so both are available everywhere, not just on one page.
  */
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, AssistantWidgetComponent],
   template: `
     <div class="flex h-screen w-screen overflow-hidden bg-white font-sans text-slate-900">
       <nav class="flex w-48 shrink-0 flex-col gap-1 border-r border-slate-200 bg-slate-950 p-3 text-sm">
@@ -46,6 +46,7 @@ import { FrontendActionsService } from '@elyvion/shared-lib';
       <div class="min-w-0 flex-1">
         <router-outlet />
       </div>
+      <elv-assistant-widget />
     </div>
   `,
 })
