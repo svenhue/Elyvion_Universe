@@ -72,3 +72,7 @@ export * from './lib/ontology-engine/ontology-api.service';
 export * from './lib/ontology-engine/ontology-engine.component';
 export * from './lib/ontology-engine/platform-environment-api.service';
 export * from './lib/ontology-engine/platform-environment-settings.component';
+
+export * from './lib/actions/action-schema';
+export * from './lib/actions/actions-api.service';
+export * from './lib/actions/frontend-actions.service';

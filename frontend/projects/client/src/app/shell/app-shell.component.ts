@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { FrontendActionsService } from '@elyvion/shared-lib';
 
 /**
  * Persistent left-hand nav (Home / App-Builder / Workflows / Ontologien)
@@ -7,6 +8,11 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
  * the viewport to its right for the page itself. Lives in the client app,
  * not shared-lib — the route set it links to is this app's own, not
  * something a generic host app would share.
+ *
+ * Also the one component mounted on every page — the natural place to
+ * register this app's frontend actions once, on boot (see
+ * `FrontendActionsService.registerBuiltins()`), and later to host the
+ * floating assistant panel.
  */
 @Component({
   selector: 'app-shell',
@@ -43,4 +49,8 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     </div>
   `,
 })
-export class AppShellComponent {}
+export class AppShellComponent {
+  constructor() {
+    inject(FrontendActionsService).registerBuiltins();
+  }
+}

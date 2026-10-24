@@ -161,6 +161,23 @@ export class WorkflowProcessor extends WorkerHost {
         });
         return { status: response.status, body: await safeJson(response) };
       }
+
+      case 'action': {
+        const moduleInfo = await this.lookupModule('actions-engine');
+        const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
+        const url = `${moduleInfo.baseUrl}${prefix}/execute/${step.actionKey}`;
+        const input = step.input ? resolveTemplate(step.input, context) : {};
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(input),
+        });
+        const parsed = await safeJson(response);
+        if (!response.ok) {
+          throw new Error(`Action "${step.actionKey}" fehlgeschlagen: ${JSON.stringify(parsed)}`);
+        }
+        return (parsed as { data?: unknown })?.data ?? parsed;
+      }
     }
   }
 

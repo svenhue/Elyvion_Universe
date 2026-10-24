@@ -354,6 +354,33 @@
                   (ngModelChange)="updateStep(step.id, { milliseconds: $event })"
                 />
               </label>
+            } @else if (step.type === 'action') {
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Action
+                <select
+                  class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                  [ngModel]="step.actionKey"
+                  (ngModelChange)="updateStep(step.id, { actionKey: $event })"
+                >
+                  <option value="">— auswählen —</option>
+                  @for (action of availableActions(); track action.key) {
+                    <option [value]="action.key">{{ action.name }} ({{ action.key }})</option>
+                  }
+                </select>
+              </label>
+              @if (selectedActionDescription(step); as description) {
+                <p class="text-[10px] text-slate-400">{{ description }}</p>
+              }
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Input (JSON, optional)
+                <input
+                  elvVariableAutocomplete
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs outline-none focus:border-indigo-400"
+                  placeholder="{{ '{' }} &quot;to&quot;: &quot;$context.step1&quot; {{ '}' }}"
+                  [ngModel]="step.input"
+                  (ngModelChange)="updateStep(step.id, { input: $event })"
+                />
+              </label>
             }
 
             <div class="space-y-2 border-t border-slate-100 pt-3">

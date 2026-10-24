@@ -34,6 +34,11 @@ const workflowStepSchema = z.discriminatedUnion('type', [
   }),
   z.object({ ...stepBase, type: z.literal('delay'), milliseconds: z.number().int().nonnegative() }),
   z.object({ ...stepBase, type: z.literal('parallel'), branches: z.array(z.string()).min(1) }),
+  // Runs one `actions-engine` action by key. A backend-target workflow's
+  // processor always calls it over HTTP; a frontend-target workflow's
+  // runner resolves it locally first (FrontendActionsService) and only
+  // falls back to HTTP for a backend-target action key.
+  z.object({ ...stepBase, type: z.literal('action'), actionKey: z.string().min(1), input: z.unknown().optional() }),
   // Frontend-only step kinds (see the frontend's `workflow-schema.ts`) —
   // the backend only ever *stores* these, for a `target: "frontend"`
   // workflow; its own processor never executes them (see its step

@@ -12,7 +12,8 @@ export type WorkflowStepType =
   | 'call-service'
   | 'condition'
   | 'delay'
-  | 'parallel';
+  | 'parallel'
+  | 'action';
 
 export interface WorkflowStepBase {
   id: string;
@@ -70,13 +71,21 @@ export interface ParallelStep extends WorkflowStepBase {
   branches: string[];
 }
 
+export interface ActionStep extends WorkflowStepBase {
+  type: 'action';
+  /** A key from `actions-engine`'s `GET /actions` — the same registry a human uses via the Actions panel and an AI agent uses via MCP. */
+  actionKey: string;
+  input?: unknown;
+}
+
 export type WorkflowStep =
   | SetVariableStep
   | HttpRequestStep
   | CallServiceStep
   | ConditionStep
   | DelayStep
-  | ParallelStep;
+  | ParallelStep
+  | ActionStep;
 
 export interface WorkflowDefinitionBody {
   startStepId: string;

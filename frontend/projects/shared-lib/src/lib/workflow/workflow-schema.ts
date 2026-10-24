@@ -7,8 +7,12 @@
  * union covers both, so the builder has a single, consistent list to
  * offer — see `stepTypesForTarget()` in the builder for which of these
  * each target actually supports:
- * - `set-variable`, `http-request`, `condition`, `delay`, `parallel`:
- *   shared, run by whichever side executes the workflow.
+ * - `set-variable`, `http-request`, `condition`, `delay`, `parallel`,
+ *   `action`: shared, run by whichever side executes the workflow —
+ *   `action` runs one `actions-engine` action by key, resolved locally
+ *   first via `FrontendActionsService` (for a frontend-target action)
+ *   and over HTTP otherwise, same registry a human uses via the Actions
+ *   panel and an AI agent uses via MCP.
  * - `run-script`, `call-backend-workflow`: frontend-only — `run-script`
  *   needs a trusted in-browser `Function()`, `call-backend-workflow` is
  *   how a frontend workflow hands off to a backend one.
@@ -29,7 +33,8 @@ export type WorkflowStepType =
   | 'call-service'
   | 'condition'
   | 'delay'
-  | 'parallel';
+  | 'parallel'
+  | 'action';
 
 export interface WorkflowStepBase {
   id: string;
@@ -101,6 +106,14 @@ export interface WorkflowParallelStep extends WorkflowStepBase {
   branches: string[];
 }
 
+export interface WorkflowActionStep extends WorkflowStepBase {
+  type: 'action';
+  /** A key from `actions-engine`'s `GET /actions`. */
+  actionKey: string;
+  /** Literal object, or a `"$context...."` path, resolved against this run's context before the call. */
+  input?: unknown;
+}
+
 export type WorkflowStep =
   | WorkflowSetVariableStep
   | WorkflowRunScriptStep
@@ -109,7 +122,8 @@ export type WorkflowStep =
   | WorkflowCallServiceStep
   | WorkflowConditionStep
   | WorkflowDelayStep
-  | WorkflowParallelStep;
+  | WorkflowParallelStep
+  | WorkflowActionStep;
 
 export interface WorkflowDefinition {
   key: string;

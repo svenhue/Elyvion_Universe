@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { createActor, fromPromise, setup } from 'xstate';
+import { ActionsApiService } from '../actions/actions-api.service';
+import { FrontendActionsService } from '../actions/frontend-actions.service';
 import { AppStateService } from '../application-runner/state/app-state.service';
 import { readPath, resolveTemplate } from './resolve-template';
 import { WorkflowApiService } from './workflow-api.service';
@@ -31,6 +33,8 @@ class WorkflowRunError extends Error {
 export class WorkflowRunnerService {
   private readonly appState = inject(AppStateService);
   private readonly workflowApi = inject(WorkflowApiService);
+  private readonly frontendActions = inject(FrontendActionsService);
+  private readonly actionsApi = inject(ActionsApiService);
 
   /** Starts `definition` and resolves once the whole run finishes — success or failure both resolve, never reject, so callers don't need a catch just to read the final state. */
   run(definition: WorkflowDefinition, initialContext: Record<string, unknown> = {}): Promise<WorkflowRunState> {
@@ -155,6 +159,17 @@ export class WorkflowRunnerService {
         // Backend-only (see `WorkflowStepType`'s doc comment) — the builder
         // shouldn't let a frontend-target workflow contain one of these.
         throw new Error(`"call-service" step "${step.id}" can't run client-side — it's a backend-target-only step kind.`);
+
+      case 'action': {
+        const input = (step.input ? resolveTemplate(step.input, context) : {}) as Record<string, unknown>;
+        // A frontend-target action's handler only exists in this tab, so
+        // check there first; a backend-target action key falls through to
+        // the same HTTP call the backend processor itself makes.
+        if (this.frontendActions.has(step.actionKey)) {
+          return this.frontendActions.execute(step.actionKey, input);
+        }
+        return firstValueFrom(this.actionsApi.execute(step.actionKey, input));
+      }
     }
   }
 }

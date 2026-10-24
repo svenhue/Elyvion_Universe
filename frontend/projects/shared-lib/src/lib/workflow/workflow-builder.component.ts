@@ -3,6 +3,8 @@ import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } fr
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { ActionDescriptor } from '../actions/action-schema';
+import { ActionsApiService } from '../actions/actions-api.service';
 import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.directive';
 import { WorkflowApiService, WorkflowDefinitionRecord, toRunState } from './workflow-api.service';
 import { WorkflowRunnerService } from './workflow-runner.service';
@@ -45,6 +47,8 @@ interface StepDraft {
   whenTrue: string;
   milliseconds: string;
   branches: string;
+  actionKey: string;
+  input: string;
 }
 
 function blankDraft(id: string, type: WorkflowStepType = 'set-variable', x = 40, y = 40): StepDraft {
@@ -71,6 +75,8 @@ function blankDraft(id: string, type: WorkflowStepType = 'set-variable', x = 40,
     whenTrue: '',
     milliseconds: '1000',
     branches: '',
+    actionKey: '',
+    input: '',
   };
 }
 
@@ -118,6 +124,10 @@ function draftFromStep(step: WorkflowStep, index: number): StepDraft {
     case 'parallel':
       draft.branches = step.branches.join(', ');
       break;
+    case 'action':
+      draft.actionKey = step.actionKey;
+      draft.input = step.input !== undefined ? stringify(step.input) : '';
+      break;
   }
   return draft;
 }
@@ -153,6 +163,7 @@ const FRONTEND_STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
   { value: 'http-request', label: 'HTTP Request' },
   { value: 'run-script', label: 'Run Script' },
   { value: 'call-backend-workflow', label: 'Call Backend Workflow' },
+  { value: 'action', label: 'Action' },
   { value: 'condition', label: 'Condition' },
   { value: 'delay', label: 'Delay' },
   { value: 'parallel', label: 'Parallel' },
@@ -162,6 +173,7 @@ const BACKEND_STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
   { value: 'set-variable', label: 'Set Variable' },
   { value: 'http-request', label: 'HTTP Request' },
   { value: 'call-service', label: 'Call Service' },
+  { value: 'action', label: 'Action' },
   { value: 'condition', label: 'Condition' },
   { value: 'delay', label: 'Delay' },
   { value: 'parallel', label: 'Parallel' },
@@ -232,9 +244,11 @@ interface PortDragState {
 export class WorkflowBuilderComponent implements OnInit {
   private readonly workflowApi = inject(WorkflowApiService);
   private readonly workflowRunner = inject(WorkflowRunnerService);
+  private readonly actionsApi = inject(ActionsApiService);
   private readonly canvasRef = viewChild<ElementRef<HTMLElement>>('canvasEl');
 
   readonly workflows = signal<WorkflowDefinitionRecord[]>([]);
+  readonly availableActions = signal<ActionDescriptor[]>([]);
   readonly loadError = signal('');
   readonly saveError = signal('');
   readonly saving = signal(false);
@@ -289,6 +303,7 @@ export class WorkflowBuilderComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadWorkflows();
+    this.actionsApi.list().subscribe({ next: (actions) => this.availableActions.set(actions) });
   }
 
   loadWorkflows(): void {
@@ -376,6 +391,11 @@ export class WorkflowBuilderComponent implements OnInit {
     return portsFor(step.type);
   }
 
+  selectedActionDescription(step: StepDraft): string | null {
+    if (step.type !== 'action' || !step.actionKey) return null;
+    return this.availableActions().find((action) => action.key === step.actionKey)?.description ?? null;
+  }
+
   nodeSummary(step: StepDraft): string {
     switch (step.type) {
       case 'set-variable':
@@ -394,6 +414,8 @@ export class WorkflowBuilderComponent implements OnInit {
         return `${step.milliseconds || 0} ms`;
       case 'parallel':
         return `${idList(step.branches).length} Branches`;
+      case 'action':
+        return step.actionKey || '…';
     }
   }
 
@@ -607,6 +629,14 @@ export class WorkflowBuilderComponent implements OnInit {
         if (!branches.length) throw new Error(`Step "${draft.id}": mindestens ein Branch ist erforderlich.`);
         return { ...base, type: 'parallel', branches };
       }
+      case 'action':
+        if (!draft.actionKey.trim()) throw new Error(`Step "${draft.id}": Action fehlt.`);
+        return {
+          ...base,
+          type: 'action',
+          actionKey: draft.actionKey.trim(),
+          input: draft.input.trim() ? coerce(draft.input) : undefined,
+        };
     }
   }
 }
