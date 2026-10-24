@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from enum import Enum
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -28,9 +30,26 @@ class AgentStepResult(BaseModel):
     """Names of actions-engine actions this agent invoked while producing `output`."""
 
 
+class RunStatus(str, Enum):
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"
+
+
 class RunResult(BaseModel):
+    """One `POST /runs` call's state — created with `status="running"` and
+    updated in place as the graph executes (see `router._execute_run`), so
+    `GET /runs`/`GET /runs/{id}` always reflects live progress, not just
+    the final outcome. Kept in-process only (see `store.py`) — acceptable
+    for now since nothing else needs a run's history to survive a restart.
+    """
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     task: str
-    team: TeamSpec
-    steps: list[AgentStepResult]
-    final_answer: str
+    status: RunStatus = RunStatus.running
+    team: TeamSpec | None = None
+    steps: list[AgentStepResult] = Field(default_factory=list)
+    final_answer: str | None = None
+    error: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

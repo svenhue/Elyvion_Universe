@@ -26,6 +26,14 @@ export const routes: Routes = [
           path: 'ontologies',
           loadComponent: () => import('@elyvion/shared-lib').then((module) => module.OntologyEngineComponent),
         },
+        {
+          path: 'agents',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.AgentEngineComponent),
+        },
+        {
+          path: 'data',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.DataEngineComponent),
+        },
       ],
     },
     { path: 'admin', children: elvAdminRoutes },

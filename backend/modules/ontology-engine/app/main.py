@@ -5,10 +5,12 @@ from fastapi import FastAPI
 
 from elyvion_shared import (
     RegisterModuleOptions,
+    RegisterRemoteActionOptions,
     configure_logging,
     get_logger,
     install_exception_handlers,
     register_module,
+    register_remote_action,
 )
 
 from .config import settings
@@ -48,6 +50,41 @@ async def lifespan(app: FastAPI):
             route_prefix=settings.module_route_prefix,
             health_check_url=f"{settings.module_base_url}/health",
             version="0.1.0",
+        )
+    )
+
+    # Exposes ontologies as actions — specifically so an agent can look up
+    # existing "angular_app_config" ontologies as reference examples of
+    # how an Elyvion application is structured before building/editing one
+    # itself (app-config's add_element/update_element actions).
+    await register_remote_action(
+        RegisterRemoteActionOptions(
+            actions_engine_url=settings.actions_engine_url,
+            key="list_app_ontologies",
+            name="App-Ontologien auflisten",
+            description="Listet alle gespeicherten Ontologien (inkl. ihres type-Felds, z. B. angular_app_config) als Referenzbeispiele für Anwendungsstrukturen.",
+            category="ontology-engine",
+            module_name=settings.module_name,
+            path="/ontologies",
+            method="GET",
+            input_schema={"type": "object", "properties": {}},
+        )
+    )
+    await register_remote_action(
+        RegisterRemoteActionOptions(
+            actions_engine_url=settings.actions_engine_url,
+            key="get_ontology_graph",
+            name="Ontologie-Graph lesen",
+            description="Liest den vollständigen Graphen (Nodes + Kanten) einer Ontologie anhand ihres Keys.",
+            category="ontology-engine",
+            module_name=settings.module_name,
+            path="/ontologies/{key}/graph",
+            method="GET",
+            input_schema={
+                "type": "object",
+                "properties": {"key": {"type": "string"}},
+                "required": ["key"],
+            },
         )
     )
     yield

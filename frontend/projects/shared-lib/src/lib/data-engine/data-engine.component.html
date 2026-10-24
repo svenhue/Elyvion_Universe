@@ -1,0 +1,164 @@
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
+    <div class="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Data</h1>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+      @if (loadError()) {
+        <p class="mb-2 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700">{{ loadError() }}</p>
+      }
+      @for (entity of entities(); track entity.name) {
+        <div
+          class="mb-2 flex w-full items-start justify-between gap-1 rounded-lg border p-3"
+          [class.border-indigo-500]="selectedEntityName() === entity.name"
+          [class.border-slate-200]="selectedEntityName() !== entity.name"
+        >
+          <button type="button" class="flex-1 text-left" (click)="selectEntity(entity)">
+            <span class="block text-xs font-medium text-slate-900">{{ entity.name }}</span>
+            <span class="text-[10px] text-slate-500">{{ entity.fields.length }} Felder</span>
+          </button>
+          <button type="button" class="text-slate-300 hover:text-rose-600" (click)="removeEntity(entity.name)">×</button>
+        </div>
+      } @empty {
+        <p class="px-2 py-6 text-center text-xs text-slate-400">Noch keine Entitäten angelegt.</p>
+      }
+    </div>
+
+    <div class="shrink-0 space-y-2 border-t border-slate-200 p-3">
+      <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Neue Entität</p>
+      <input
+        class="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-indigo-400"
+        placeholder="Name, z. B. Transportauftraege"
+        [ngModel]="newEntityName()"
+        (ngModelChange)="newEntityName.set($event)"
+      />
+
+      @for (field of newFields(); track $index) {
+        <div class="flex items-center gap-1">
+          <input
+            class="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
+            placeholder="Feldname"
+            [ngModel]="field.name"
+            (ngModelChange)="updateFieldRow($index, { name: $event })"
+          />
+          <select
+            class="rounded-md border border-slate-200 bg-white px-1 py-1 text-[11px] outline-none focus:border-indigo-400"
+            [ngModel]="field.type"
+            (ngModelChange)="updateFieldRow($index, { type: $event })"
+          >
+            <option value="string">Text</option>
+            <option value="number">Zahl</option>
+            <option value="boolean">Ja/Nein</option>
+            <option value="date">Datum</option>
+          </select>
+          <label class="flex items-center gap-0.5 text-[9px] text-slate-500" title="Pflichtfeld">
+            <input type="checkbox" [ngModel]="field.required" (ngModelChange)="updateFieldRow($index, { required: $event })" />
+            *
+          </label>
+          <button type="button" class="text-slate-300 hover:text-rose-600" (click)="removeFieldRow($index)">×</button>
+        </div>
+      }
+      <button type="button" class="text-[10px] text-indigo-600 hover:text-indigo-800" (click)="addFieldRow()">+ Feld</button>
+
+      <button
+        type="button"
+        class="w-full rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+        [disabled]="creatingEntity()"
+        (click)="createEntity()"
+      >{{ creatingEntity() ? 'Legt an…' : 'Entität anlegen' }}</button>
+    </div>
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6">
+    @if (selectedEntity(); as entity) {
+      <div class="mx-auto max-w-4xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-slate-900">{{ entity.name }}</h2>
+          <button
+            type="button"
+            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white"
+            (click)="openNewRecordForm()"
+          >+ Datensatz</button>
+        </div>
+
+        @if (recordForm(); as form) {
+          <div class="space-y-2 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              {{ editingRecordId() ? 'Datensatz bearbeiten' : 'Neuer Datensatz' }}
+            </p>
+            <div class="grid grid-cols-2 gap-2">
+              @for (field of form; track field.name) {
+                <label class="block space-y-1 text-[10px] text-slate-500">
+                  {{ field.name }}
+                  @if (field.type === 'boolean') {
+                    <select
+                      class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateRecordField(field.name, $event)"
+                    >
+                      <option value="">—</option>
+                      <option value="true">Ja</option>
+                      <option value="false">Nein</option>
+                    </select>
+                  } @else {
+                    <input
+                      [type]="field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'"
+                      class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateRecordField(field.name, $event)"
+                    />
+                  }
+                </label>
+              }
+            </div>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                [disabled]="savingRecord()"
+                (click)="saveRecord()"
+              >{{ savingRecord() ? 'Speichert…' : 'Speichern' }}</button>
+              <button type="button" class="rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-600" (click)="closeRecordForm()">
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        }
+
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+              @for (field of entity.fields; track field.name) {
+                <th class="py-2 pr-3 font-medium">{{ field.name }}</th>
+              }
+              <th class="py-2 pr-3 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (record of records(); track record.id) {
+              <tr class="border-b border-slate-100">
+                @for (field of entity.fields; track field.name) {
+                  <td class="py-2 pr-3 text-slate-700">{{ record[field.name] }}</td>
+                }
+                <td class="py-2 pr-3 text-right">
+                  <button type="button" class="mr-2 text-indigo-600 hover:text-indigo-800" (click)="openEditRecordForm(record)">Bearbeiten</button>
+                  <button type="button" class="text-rose-500 hover:text-rose-700" (click)="removeRecord(record.id)">Löschen</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td [attr.colspan]="entity.fields.length + 1" class="py-6 text-center text-slate-400">Noch keine Datensätze.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="flex h-full items-center justify-center">
+        <p class="text-sm text-slate-400">Wähle eine Entität links aus oder lege eine neue an.</p>
+      </div>
+    }
+  </div>
+</main>

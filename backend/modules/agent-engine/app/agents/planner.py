@@ -9,16 +9,8 @@ instead of parsing free text.
 
 from anthropic import AsyncAnthropic
 
+from . import prompts
 from .schemas import TeamSpec
-
-_PLANNER_SYSTEM_PROMPT = (
-    "Du bist ein Planer für Multi-Agenten-Systeme. Gegeben eine Aufgabe, "
-    "entwirf ein Team aus 2 bis 4 spezialisierten Agenten, die die Aufgabe "
-    "nacheinander bearbeiten — jeder Agent bekommt die Aufgabe plus die "
-    "Ausgabe des vorherigen Agenten und baut darauf auf. Der letzte Agent "
-    "soll die endgültige Antwort liefern. Antworte ausschließlich über das "
-    "Werkzeug `design_team`."
-)
 
 _DESIGN_TEAM_TOOL = {
     "name": "design_team",
@@ -57,7 +49,7 @@ async def design_team(client: AsyncAnthropic, model: str, task: str) -> TeamSpec
     response = await client.messages.create(
         model=model,
         max_tokens=1024,
-        system=_PLANNER_SYSTEM_PROMPT,
+        system=prompts.get("planner_system_prompt").value,
         tools=[_DESIGN_TEAM_TOOL],
         tool_choice={"type": "tool", "name": "design_team"},
         messages=[{"role": "user", "content": task}],

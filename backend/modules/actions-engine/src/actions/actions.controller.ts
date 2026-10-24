@@ -3,8 +3,9 @@ import { envelope } from '@elyvion/shared';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ActionMetadata } from './action.types';
 import { ActionsRegistry } from './actions.registry';
-import { registerFrontendActionSchema } from './dto/actions.dto';
+import { registerFrontendActionSchema, registerRemoteActionSchema } from './dto/actions.dto';
 import { FrontendActionsService } from './frontend-actions.service';
+import { RemoteActionsService } from './remote-actions.service';
 
 /**
  * `zodToJsonSchema`'s generic signature hits TS's type-instantiation depth
@@ -24,6 +25,7 @@ export class ActionsController {
   constructor(
     private readonly registry: ActionsRegistry,
     private readonly frontendActions: FrontendActionsService,
+    private readonly remoteActions: RemoteActionsService,
   ) {}
 
   @Get('actions')
@@ -36,8 +38,9 @@ export class ActionsController {
       inputSchema: inputJsonSchema(metadata),
       target: 'backend' as const,
     }));
+    const remote = await this.remoteActions.list();
     const frontend = await this.frontendActions.list();
-    return envelope([...backend, ...frontend]);
+    return envelope([...backend, ...remote, ...frontend]);
   }
 
   @Get('actions/:key')
@@ -53,6 +56,17 @@ export class ActionsController {
         target: 'backend' as const,
       });
     }
+    const remoteEntry = await this.remoteActions.findOne(key);
+    if (remoteEntry) {
+      return envelope({
+        key: remoteEntry.key,
+        name: remoteEntry.name,
+        description: remoteEntry.description,
+        category: remoteEntry.category,
+        inputSchema: remoteEntry.inputSchema,
+        target: 'backend' as const,
+      });
+    }
     const frontendEntry = await this.frontendActions.findOne(key);
     if (!frontendEntry) {
       throw new NotFoundException(`Action "${key}" wurde nicht gefunden.`);
@@ -63,21 +77,26 @@ export class ActionsController {
   @Post('execute/:key')
   async execute(@Param('key') key: string, @Body() body: unknown) {
     const entry = this.registry.get(key);
-    if (!entry) {
-      const frontendEntry = await this.frontendActions.findOne(key);
-      if (frontendEntry) {
-        throw new BadRequestException(
-          `Action "${key}" läuft im Frontend und kann nicht vom Backend ausgeführt werden.`,
-        );
+    if (entry) {
+      const parsed = entry.metadata.inputSchema.safeParse(body ?? {});
+      if (!parsed.success) {
+        throw new BadRequestException(parsed.error.issues);
       }
-      throw new NotFoundException(`Action "${key}" wurde nicht gefunden.`);
+      return envelope(await entry.handler.run(parsed.data));
     }
-    const parsed = entry.metadata.inputSchema.safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new BadRequestException(parsed.error.issues);
+
+    const remoteEntry = await this.remoteActions.findOne(key);
+    if (remoteEntry) {
+      return envelope(await this.remoteActions.execute(remoteEntry, (body ?? {}) as Record<string, unknown>));
     }
-    const output = await entry.handler.run(parsed.data);
-    return envelope(output);
+
+    const frontendEntry = await this.frontendActions.findOne(key);
+    if (frontendEntry) {
+      throw new BadRequestException(
+        `Action "${key}" läuft im Frontend und kann nicht vom Backend ausgeführt werden.`,
+      );
+    }
+    throw new NotFoundException(`Action "${key}" wurde nicht gefunden.`);
   }
 
   @Post('frontend-actions')
@@ -87,5 +106,14 @@ export class ActionsController {
       throw new BadRequestException(parsed.error.issues);
     }
     return envelope(await this.frontendActions.upsert(parsed.data));
+  }
+
+  @Post('remote-actions')
+  async registerRemoteAction(@Body() body: unknown) {
+    const parsed = registerRemoteActionSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues);
+    }
+    return envelope(await this.remoteActions.upsert(parsed.data));
   }
 }

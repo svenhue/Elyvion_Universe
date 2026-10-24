@@ -1,3 +1,4 @@
+from .actions import RegisterRemoteActionOptions, register_remote_action
 from .auth import make_current_user_dependency
 from .config import BaseModuleSettings
 from .errors import install_exception_handlers
@@ -14,4 +15,6 @@ __all__ = [
     "get_logger",
     "RegisterModuleOptions",
     "register_module",
+    "RegisterRemoteActionOptions",
+    "register_remote_action",
 ]

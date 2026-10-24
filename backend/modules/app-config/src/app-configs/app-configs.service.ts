@@ -1,8 +1,8 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AppConfig, AppConfigDocument } from './schemas/app-config.schema';
-import { ResolveSchemaRequest, UpsertAppConfigDto } from './dto/resolve-schema.dto';
+import { AppConfig, AppConfigDocument, ComponentNode } from './schemas/app-config.schema';
+import { AddElementDto, ResolveSchemaRequest, UpsertAppConfigDto } from './dto/resolve-schema.dto';
 
 @Injectable()
 export class AppConfigsService {
@@ -77,5 +77,55 @@ export class AppConfigsService {
     if (result.deletedCount === 0) {
       throw new NotFoundException(`No app config for applicationId "${applicationId}"`);
     }
+  }
+
+  /**
+   * Adds a new element as a child of `parentId` — the `add_element` action
+   * (see `main.ts`'s boot-time `registerRemoteAction` calls), what lets an
+   * agent build out a live application instead of only ever replacing the
+   * whole schema via `upsert`.
+   */
+  async addElement(applicationId: string, dto: AddElementDto) {
+    const config = await this.findOne(applicationId);
+    if (config.components.some((component) => component.id === dto.element.id)) {
+      throw new BadRequestException(`Element "${dto.element.id}" existiert bereits.`);
+    }
+    const parentIndex = config.components.findIndex((component) => component.id === dto.parentId);
+    if (parentIndex === -1) {
+      throw new NotFoundException(`Eltern-Element "${dto.parentId}" wurde nicht gefunden.`);
+    }
+
+    const nextComponents = [...config.components, dto.element as ComponentNode];
+    nextComponents[parentIndex] = {
+      ...nextComponents[parentIndex],
+      children: [...(nextComponents[parentIndex].children ?? []), dto.element.id],
+    };
+
+    return this.model.findOneAndUpdate({ applicationId }, { components: nextComponents }, { new: true }).lean();
+  }
+
+  /**
+   * Merges `patch` into one existing element — `attributes` merges rather
+   * than replaces wholesale, since that's the field an agent edits most
+   * (e.g. a button's label or class) and a shallow replace would silently
+   * drop every attribute the patch didn't mention.
+   */
+  async updateElement(applicationId: string, elementId: string, patch: Record<string, unknown>) {
+    const config = await this.findOne(applicationId);
+    const index = config.components.findIndex((component) => component.id === elementId);
+    if (index === -1) {
+      throw new NotFoundException(`Element "${elementId}" wurde nicht gefunden.`);
+    }
+
+    const existing = config.components[index];
+    const patchedAttributes =
+      patch['attributes'] && typeof patch['attributes'] === 'object'
+        ? { ...(existing.attributes ?? {}), ...(patch['attributes'] as Record<string, unknown>) }
+        : existing.attributes;
+
+    const nextComponents = [...config.components];
+    nextComponents[index] = { ...existing, ...patch, id: elementId, attributes: patchedAttributes } as typeof existing;
+
+    return this.model.findOneAndUpdate({ applicationId }, { components: nextComponents }, { new: true }).lean();
   }
 }

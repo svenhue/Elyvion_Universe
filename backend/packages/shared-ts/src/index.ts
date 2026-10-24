@@ -7,3 +7,4 @@ export * from './errors/http-exception.filter';
 export * from './response/envelope';
 export * from './http/http-client.service';
 export * from './registry/register-module';
+export * from './actions/register-remote-action';

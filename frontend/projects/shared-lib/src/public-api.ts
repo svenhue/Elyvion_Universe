@@ -81,3 +81,11 @@ export * from './lib/assistant/assistant-widget.component';
 
 export * from './lib/chat/chat-schema';
 export * from './lib/chat/chat-api.service';
+
+export * from './lib/agent-engine/agent-schema';
+export * from './lib/agent-engine/agent-api.service';
+export * from './lib/agent-engine/agent-engine.component';
+
+export * from './lib/data-engine/data-engine-schema';
+export * from './lib/data-engine/data-engine-api.service';
+export * from './lib/data-engine/data-engine.component';

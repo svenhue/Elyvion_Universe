@@ -43,6 +43,17 @@ const componentNodeSchema = z
     }
   });
 
+export const addElementSchema = z.object({
+  parentId: z.string().min(1),
+  element: componentNodeSchema,
+});
+export type AddElementDto = z.infer<typeof addElementSchema>;
+
+export const updateElementSchema = z.object({
+  patch: z.record(z.string(), z.unknown()),
+});
+export type UpdateElementDto = z.infer<typeof updateElementSchema>;
+
 export const upsertAppConfigSchema = z.object({
   applicationId: z.string().min(1),
   name: z.string().min(1),
