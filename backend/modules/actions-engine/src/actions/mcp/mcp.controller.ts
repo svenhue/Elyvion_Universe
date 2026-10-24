@@ -1,10 +1,19 @@
 import { All, Controller, Req, Res } from '@nestjs/common';
+import { checkAuthorization, logEvent } from '@elyvion/shared';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ActionsRegistry } from '../actions.registry';
 import { RemoteActionsService } from '../remote-actions.service';
+
+const LOGGING_URL = process.env.LOGGING_URL ?? 'http://localhost:3018';
+const SECURITY_URL = process.env.SECURITY_URL ?? 'http://localhost:3022';
+
+interface SubjectContext {
+  subjectId?: string;
+  subjectType?: 'user' | 'agent';
+}
 
 /**
  * Remote actions only carry a JSON Schema (no zod instance crosses a
@@ -23,10 +32,15 @@ const REMOTE_ACTION_TOOL_SHAPE = { input: z.record(z.string(), z.unknown()) };
  * Exposes every action as an MCP tool — in-process ones (`ActionsRegistry`)
  * *and* remote ones another module registered (`RemoteActionsService`) —
  * the "MCP-ready" requirement, and the thing that lets `agent-engine`'s
- * agents call any module's actions through one connection. Stateless mode
- * (`sessionIdGenerator: undefined`): a fresh server+transport per request
- * instead of a long-lived session, which is fine here since actions are
- * cheap to look up and have no per-session state of their own.
+ * agents call any module's actions through one connection. This is the
+ * agent-facing side of "jede Aktion wird vorher geprüft, darf der Agent
+ * das" — the same authorization + logging every call gets through
+ * `ActionsController.execute` (the person-facing REST path), applied
+ * here too so an agent calling via MCP can't bypass either. Stateless
+ * mode (`sessionIdGenerator: undefined`): a fresh server+transport per
+ * request instead of a long-lived session, which is fine here since
+ * actions are cheap to look up and have no per-session state of their
+ * own.
  */
 @Controller('mcp')
 export class McpController {
@@ -37,7 +51,11 @@ export class McpController {
 
   @All()
   async handle(@Req() req: Request, @Res() res: Response): Promise<void> {
-    const server = await this.buildServer();
+    const subject: SubjectContext = {
+      subjectId: req.headers['x-subject-id'] as string | undefined,
+      subjectType: req.headers['x-subject-type'] as 'user' | 'agent' | undefined,
+    };
+    const server = await this.buildServer(subject);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => {
       transport.close();
@@ -47,7 +65,7 @@ export class McpController {
     await transport.handleRequest(req, res, req.body);
   }
 
-  private async buildServer(): Promise<McpServer> {
+  private async buildServer(subject: SubjectContext): Promise<McpServer> {
     const server = new McpServer({ name: 'elyvion-actions-engine', version: '0.1.0' });
 
     for (const metadata of this.registry.list()) {
@@ -56,8 +74,15 @@ export class McpController {
         metadata.key,
         { title: metadata.name, description: metadata.description, inputSchema: metadata.inputSchema.shape },
         async (input: unknown) => {
-          const output = await entry.handler.run(input);
-          return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+          await assertAuthorized(metadata.key, metadata.requiredPermission, subject);
+          try {
+            const output = await entry.handler.run(input);
+            void logExecution(metadata.key, 'info', input, output);
+            return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+          } catch (error) {
+            void logExecution(metadata.key, 'error', input, undefined, error);
+            throw error;
+          }
         },
       );
     }
@@ -75,14 +100,42 @@ export class McpController {
         action.key,
         { title: action.name, description: action.description, inputSchema: REMOTE_ACTION_TOOL_SHAPE },
         async (args: { input?: Record<string, unknown> }) => {
+          await assertAuthorized(action.key, action.requiredPermission, subject);
           const entry = await this.remoteActions.findOne(action.key);
           if (!entry) throw new Error(`Action "${action.key}" wurde nicht gefunden.`);
-          const output = await this.remoteActions.execute(entry, args.input ?? (args as Record<string, unknown>));
-          return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+          const input = args.input ?? (args as Record<string, unknown>);
+          try {
+            const output = await this.remoteActions.execute(entry, input);
+            void logExecution(action.key, 'info', input, output);
+            return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+          } catch (error) {
+            void logExecution(action.key, 'error', input, undefined, error);
+            throw error;
+          }
         },
       );
     }
 
     return server;
   }
+}
+
+async function assertAuthorized(actionKey: string, requiredPermission: string | undefined, subject: SubjectContext): Promise<void> {
+  if (!requiredPermission) return;
+  const result = await checkAuthorization({ securityUrl: SECURITY_URL, requiredPermission, ...subject });
+  if (!result.allowed) {
+    void logExecution(actionKey, 'error', subject, undefined, `Autorisierung verweigert: ${result.reason}`);
+    throw new Error(`Nicht autorisiert für Action "${actionKey}": ${result.reason}`);
+  }
+}
+
+async function logExecution(actionKey: string, level: 'info' | 'error', input: unknown, output?: unknown, error?: unknown): Promise<void> {
+  await logEvent({
+    loggingUrl: LOGGING_URL,
+    source: 'actions-engine-mcp',
+    level,
+    message: level === 'info' ? `Action "${actionKey}" via MCP ausgeführt.` : `Action "${actionKey}" via MCP fehlgeschlagen.`,
+    actionKey,
+    context: { input, output, error: error instanceof Error ? error.message : error ? String(error) : undefined },
+  });
 }

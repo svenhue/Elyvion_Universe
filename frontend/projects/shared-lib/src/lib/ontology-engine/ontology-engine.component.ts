@@ -108,8 +108,19 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
   readonly nodeCount = signal(0);
   readonly edgeCount = signal(0);
 
+  /** Every node in the current graph, for the right panel's "create a relationship to…" picker — the drag-a-handle gesture (`cytoscape-edgehandles`) is the fast path, this is the reliable, discoverable one. */
+  readonly allNodes = signal<{ id: string; name: string }[]>([]);
+  readonly newEdgeTargetId = signal('');
+  readonly newEdgeType = signal('relates_to');
+
+  readonly connectableNodes = computed(() => this.allNodes().filter((node) => node.id !== this.selectedNode()?.id));
+
+  /** Bumped on every edge add/remove so `edgesForSelectedNode` re-reads Cytoscape's live state — the computed otherwise only tracks `selectedNode`, and a mutation that doesn't change *which* node is selected (e.g. connecting to a newly-picked target) would leave it stale. */
+  private readonly edgeGraphVersion = signal(0);
+
   readonly edgesForSelectedNode = computed(() => {
     const node = this.selectedNode();
+    this.edgeGraphVersion();
     if (!node || !this.cy) return [];
     const cyNode = this.cy.getElementById(node.id);
     return cyNode
@@ -254,7 +265,31 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
         this.ontologyApi.createEdge(key, { source_id: sourceNode.id(), target_id: targetNode.id(), type: 'relates_to' }),
       );
       this.cy?.add({ group: 'edges', data: { id: created.id, source: created.source_id, target: created.target_id, type: created.type } });
+      this.edgeCount.update((count) => count + 1);
+      this.edgeGraphVersion.update((v) => v + 1);
       this.onEdgeTapped(this.cy!.getElementById(created.id) as unknown as cytoscape.EdgeSingular);
+    } catch (error) {
+      this.loadError.set(errorMessage(error, 'Beziehung konnte nicht erstellt werden.'));
+    }
+  }
+
+  /** The right-panel alternative to dragging an edgehandles handle — pick a target node from the list instead of a precise drag gesture. */
+  async createRelationshipFromPanel(): Promise<void> {
+    const key = this.selectedOntologyKey();
+    const node = this.selectedNode();
+    const targetId = this.newEdgeTargetId();
+    const type = this.newEdgeType().trim() || 'relates_to';
+    if (!key || !node || !targetId || targetId === node.id) return;
+    try {
+      const created = await firstValueFrom(this.ontologyApi.createEdge(key, { source_id: node.id, target_id: targetId, type }));
+      this.cy?.add({
+        group: 'edges',
+        data: { id: created.id, source: created.source_id, target: created.target_id, type: created.type },
+      });
+      this.edgeCount.update((count) => count + 1);
+      this.edgeGraphVersion.update((v) => v + 1);
+      this.newEdgeTargetId.set('');
+      this.newEdgeType.set('relates_to');
     } catch (error) {
       this.loadError.set(errorMessage(error, 'Beziehung konnte nicht erstellt werden.'));
     }
@@ -309,6 +344,8 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
       ]);
       this.nodeCount.set(graph.nodes.length);
       this.edgeCount.set(graph.edges.length);
+      this.edgeGraphVersion.update((v) => v + 1);
+      this.allNodes.set(graph.nodes.map((node) => ({ id: node.id, name: node.name })));
       // The container is hidden (display:none) until an ontology is
       // selected, so Cytoscape's cached size is stale the first time —
       // resize before fitting, or the viewport math is wrong.
@@ -352,6 +389,7 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
       position: { x: created.x, y: created.y },
     });
     this.nodeCount.update((count) => count + 1);
+    this.allNodes.update((nodes) => [...nodes, { id: created.id, name: created.name }]);
     this.onNodeTapped(cy.getElementById(created.id) as unknown as cytoscape.NodeSingular);
   }
 
@@ -370,8 +408,13 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
     const node = this.selectedNode();
     if (!key || !node) return;
     await firstValueFrom(this.ontologyApi.deleteNode(key, node.id));
-    this.cy?.getElementById(node.id).remove();
+    const cyNode = this.cy?.getElementById(node.id);
+    const removedEdgeCount = cyNode?.connectedEdges().length ?? 0; // removing a node also drops its edges in Cytoscape
+    cyNode?.remove();
     this.nodeCount.update((count) => Math.max(0, count - 1));
+    this.edgeCount.update((count) => Math.max(0, count - removedEdgeCount));
+    this.edgeGraphVersion.update((v) => v + 1);
+    this.allNodes.update((nodes) => nodes.filter((n) => n.id !== node.id));
     this.selectedNode.set(null);
   }
 
@@ -381,6 +424,7 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
     await firstValueFrom(this.ontologyApi.deleteEdge(key, edgeId));
     this.cy?.getElementById(edgeId).remove();
     this.edgeCount.update((count) => Math.max(0, count - 1));
+    this.edgeGraphVersion.update((v) => v + 1);
     if (this.selectedEdge()?.id === edgeId) this.selectedEdge.set(null);
   }
 
@@ -421,6 +465,7 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
     cyNode?.data('type', node.type);
     cyNode?.data('name', node.name);
     cyNode?.data('attributes', attributes);
+    this.allNodes.update((nodes) => nodes.map((n) => (n.id === node.id ? { ...n, name: node.name } : n)));
   }
 
   async saveEdge(): Promise<void> {

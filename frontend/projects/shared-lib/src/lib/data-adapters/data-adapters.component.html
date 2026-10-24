@@ -1,0 +1,140 @@
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-80 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
+    <div class="mb-3 flex h-8 shrink-0 items-center gap-2">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Data-Adapters</h1>
+    </div>
+
+    @if (loadError()) {
+      <p class="mb-2 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700">{{ loadError() }}</p>
+    }
+
+    <div class="mb-3 space-y-1">
+      @for (adapter of adapters(); track adapter._id) {
+        <button
+          type="button"
+          (click)="select(adapter)"
+          class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition"
+          [class.bg-indigo-100]="selectedId() === adapter._id"
+          [class.hover:bg-slate-100]="selectedId() !== adapter._id"
+        >
+          <span>{{ adapter.name }}</span>
+          <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">{{ adapter.type }}</span>
+        </button>
+      } @empty {
+        <p class="px-2.5 py-1.5 text-xs text-slate-400">Noch keine Adapter angelegt.</p>
+      }
+    </div>
+
+    <form class="space-y-2 border-t border-slate-200 pt-3 text-xs" (submit.prevent)="createAdapter()">
+      <p class="font-medium text-slate-700">Neuer Adapter</p>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Name"
+        [ngModel]="newName()"
+        (ngModelChange)="newName.set($event)"
+        name="newName"
+      />
+      <select
+        class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5"
+        [ngModel]="newType()"
+        (ngModelChange)="newType.set($event)"
+        name="newType"
+      >
+        @for (type of adapterTypes; track type) {
+          <option [value]="type">{{ type }}</option>
+        }
+      </select>
+      <textarea
+        class="h-24 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px]"
+        placeholder='{"url": "..."}'
+        [ngModel]="newConnectionConfig()"
+        (ngModelChange)="newConnectionConfig.set($event)"
+        name="newConnectionConfig"
+      ></textarea>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Cron-Schedule (optional, z. B. */5 * * * *)"
+        [ngModel]="newSchedule()"
+        (ngModelChange)="newSchedule.set($event)"
+        name="newSchedule"
+      />
+      @if (createError()) {
+        <p class="text-rose-600">{{ createError() }}</p>
+      }
+      <button type="submit" class="w-full rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white" [disabled]="creating()">
+        {{ creating() ? 'Lege an…' : 'Adapter anlegen' }}
+      </button>
+    </form>
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6">
+    @if (selectedAdapter(); as adapter) {
+      <div class="mb-4 flex items-start justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">{{ adapter.name }}</h2>
+          <p class="text-xs text-slate-500">{{ adapter.type }} · {{ adapter.enabled ? 'aktiv' : 'deaktiviert' }}</p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white" (click)="triggerRun()" [disabled]="triggering()">
+            {{ triggering() ? 'Läuft…' : 'Datenstream jetzt starten' }}
+          </button>
+          <button type="button" class="rounded-md bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700" (click)="removeAdapter(adapter._id)">
+            Löschen
+          </button>
+        </div>
+      </div>
+
+      <div class="mb-6 flex items-end gap-2">
+        <label class="flex-1 space-y-1 text-xs text-slate-500">
+          Cron-Schedule
+          <input
+            class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+            placeholder="leer = nur manuell auslösbar"
+            [ngModel]="scheduleDraft()"
+            (ngModelChange)="scheduleDraft.set($event)"
+          />
+        </label>
+        <button type="button" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white" (click)="saveSchedule()">
+          Speichern
+        </button>
+      </div>
+
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Lauf-Historie</h3>
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+            <th class="py-2">Gestartet</th>
+            <th class="py-2">Status</th>
+            <th class="py-2">Datensätze</th>
+            <th class="py-2">Fehler</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (run of runs(); track run._id) {
+            <tr class="border-b border-slate-100">
+              <td class="py-2 text-slate-500">{{ run.startedAt | date: 'short' }}</td>
+              <td class="py-2">
+                <span
+                  class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                  [class.bg-sky-100]="run.status === 'running'"
+                  [class.text-sky-700]="run.status === 'running'"
+                  [class.bg-emerald-100]="run.status === 'succeeded'"
+                  [class.text-emerald-700]="run.status === 'succeeded'"
+                  [class.bg-rose-100]="run.status === 'failed'"
+                  [class.text-rose-700]="run.status === 'failed'"
+                >{{ run.status }}</span>
+              </td>
+              <td class="py-2">{{ run.recordsProcessed ?? '—' }}</td>
+              <td class="py-2 text-rose-600">{{ run.error ?? '' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="4" class="py-6 text-center text-slate-400">Noch keine Läufe.</td></tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <p class="text-sm text-slate-400">Adapter aus der Liste wählen oder einen neuen anlegen.</p>
+    }
+  </div>
+</main>

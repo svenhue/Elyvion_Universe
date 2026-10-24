@@ -10,6 +10,7 @@ export interface FrontendActionDescriptor {
   description: string;
   category?: string;
   inputSchema: Record<string, unknown>;
+  requiredPermission?: string;
   target: 'frontend';
 }
 
@@ -49,6 +50,7 @@ function toDescriptor(doc: FrontendAction): FrontendActionDescriptor {
     description: doc.description,
     category: doc.category,
     inputSchema: doc.inputSchema,
+    requiredPermission: doc.requiredPermission,
     target: 'frontend',
   };
 }

@@ -26,6 +26,10 @@ export class FrontendAction {
   @Prop({ type: MongooseSchema.Types.Mixed, required: true })
   inputSchema!: Record<string, unknown>;
 
+  /** `"resourceKey:permissionKey"` — the Angular app's own `FrontendActionsService.execute` checks this against the `security` module before running the action. */
+  @Prop()
+  requiredPermission?: string;
+
   @Prop({ default: Date.now })
   updatedAt!: Date;
 }

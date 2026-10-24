@@ -8,3 +8,6 @@ export * from './response/envelope';
 export * from './http/http-client.service';
 export * from './registry/register-module';
 export * from './actions/register-remote-action';
+export * from './logging/log-event';
+export * from './security/check-authorization';
+export * from './security/register-authorization';

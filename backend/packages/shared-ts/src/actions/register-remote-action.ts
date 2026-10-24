@@ -13,6 +13,8 @@ export interface RegisterRemoteActionOptions {
   /** May contain `{paramName}` placeholders, filled from the execute call's input (see actions-engine's `RemoteActionsService`). */
   path: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /** `"resourceKey:permissionKey"` — checked against the `security` module before this action runs. Omit for actions that don't need gating. */
+  requiredPermission?: string;
 }
 
 /**

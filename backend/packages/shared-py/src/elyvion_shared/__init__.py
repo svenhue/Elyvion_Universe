@@ -3,6 +3,7 @@ from .auth import make_current_user_dependency
 from .config import BaseModuleSettings
 from .errors import install_exception_handlers
 from .http_client import create_http_client
+from .logevent import LogEventOptions, log_event
 from .logging import configure_logging, get_logger
 from .registry import RegisterModuleOptions, register_module
 
@@ -17,4 +18,6 @@ __all__ = [
     "register_module",
     "RegisterRemoteActionOptions",
     "register_remote_action",
+    "LogEventOptions",
+    "log_event",
 ]

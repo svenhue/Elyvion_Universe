@@ -1,0 +1,119 @@
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50 p-3">
+    <div class="mb-3 flex h-8 shrink-0 items-center gap-2">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Logging</h1>
+    </div>
+
+    <label class="mb-2 block space-y-1 text-[10px] text-slate-500">
+      Source
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+        placeholder="z. B. actions-engine, frontend"
+        [ngModel]="sourceFilter()"
+        (ngModelChange)="sourceFilter.set($event)"
+        (keydown.enter)="applyFilters()"
+      />
+    </label>
+    <label class="mb-2 block space-y-1 text-[10px] text-slate-500">
+      Level
+      <select
+        class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+        [ngModel]="levelFilter()"
+        (ngModelChange)="levelFilter.set($event); applyFilters()"
+      >
+        <option value="">Alle</option>
+        <option value="debug">debug</option>
+        <option value="info">info</option>
+        <option value="warn">warn</option>
+        <option value="error">error</option>
+      </select>
+    </label>
+    <label class="mb-3 block space-y-1 text-[10px] text-slate-500">
+      Action-Key
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+        [ngModel]="actionKeyFilter()"
+        (ngModelChange)="actionKeyFilter.set($event)"
+        (keydown.enter)="applyFilters()"
+      />
+    </label>
+
+    <div class="mb-3 flex gap-2">
+      <button type="button" class="flex-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white" (click)="applyFilters()">
+        Filtern
+      </button>
+      <label class="flex items-center gap-1 text-[10px] text-slate-500">
+        <input type="checkbox" [ngModel]="autoRefresh()" (ngModelChange)="autoRefresh.set($event)" />
+        Auto
+      </label>
+    </div>
+
+    @if (loadError()) {
+      <p class="rounded-md bg-rose-50 p-2 text-[11px] text-rose-700">{{ loadError() }}</p>
+    }
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto">
+    <table class="w-full border-collapse text-xs">
+      <thead class="sticky top-0 bg-white">
+        <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+          <th class="px-4 py-2 font-medium">Zeit</th>
+          <th class="px-4 py-2 font-medium">Level</th>
+          <th class="px-4 py-2 font-medium">Source</th>
+          <th class="px-4 py-2 font-medium">Action</th>
+          <th class="px-4 py-2 font-medium">Nachricht</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (log of logs(); track log.id) {
+          <tr class="cursor-pointer border-b border-slate-100 hover:bg-slate-50" (click)="selectLog(log)">
+            <td class="whitespace-nowrap px-4 py-2 text-slate-400">{{ log.createdAt | date: 'short' }}</td>
+            <td class="px-4 py-2">
+              <span
+                class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                [class.bg-slate-100]="log.level === 'debug'"
+                [class.text-slate-500]="log.level === 'debug'"
+                [class.bg-sky-100]="log.level === 'info'"
+                [class.text-sky-700]="log.level === 'info'"
+                [class.bg-amber-100]="log.level === 'warn'"
+                [class.text-amber-700]="log.level === 'warn'"
+                [class.bg-rose-100]="log.level === 'error'"
+                [class.text-rose-700]="log.level === 'error'"
+              >{{ log.level }}</span>
+            </td>
+            <td class="px-4 py-2 text-slate-600">{{ log.source }}</td>
+            <td class="px-4 py-2 text-slate-600">{{ log.actionKey ?? '—' }}</td>
+            <td class="max-w-md truncate px-4 py-2 text-slate-800">{{ log.message }}</td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5" class="px-4 py-10 text-center text-slate-400">Noch keine Log-Einträge.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (selectedLog(); as log) {
+    <aside class="flex h-full w-96 shrink-0 flex-col overflow-y-auto border-l border-slate-200 p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <p class="text-sm font-semibold text-slate-900">Details</p>
+        <button type="button" class="text-slate-400 hover:text-slate-600" (click)="selectedLog.set(null)">×</button>
+      </div>
+      <dl class="space-y-2 text-xs">
+        <div><dt class="text-slate-400">Zeit</dt><dd>{{ log.createdAt | date: 'medium' }}</dd></div>
+        <div><dt class="text-slate-400">Level</dt><dd>{{ log.level }}</dd></div>
+        <div><dt class="text-slate-400">Source</dt><dd>{{ log.source }}</dd></div>
+        <div><dt class="text-slate-400">Action</dt><dd>{{ log.actionKey ?? '—' }}</dd></div>
+        <div><dt class="text-slate-400">Nachricht</dt><dd>{{ log.message }}</dd></div>
+        @if (log.context) {
+          <div>
+            <dt class="mb-1 text-slate-400">Context</dt>
+            <dd><pre class="overflow-x-auto rounded-md bg-slate-50 p-2 text-[10px]">{{ log.context | json }}</pre></dd>
+          </div>
+        }
+      </dl>
+    </aside>
+  }
+</main>

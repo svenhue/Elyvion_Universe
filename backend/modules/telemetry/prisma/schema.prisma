@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TargetSource {
+  registry_module
+  deployment
+  manual
+}
+
+enum HealthStatus {
+  up
+  down
+}
+
+/// A health-checked target — either auto-discovered from the Registry's
+/// module list, registered by deployment-engine for a running deployment,
+/// or added manually. Generic on purpose: health tracking shouldn't care
+/// whether it's pinging a backend module or a deployed Angular app.
+model HealthTarget {
+  id                  String       @id @default(uuid())
+  name                String       @unique
+  url                 String
+  source              TargetSource @default(manual)
+  checkIntervalSeconds Int         @default(30)
+  createdAt           DateTime     @default(now())
+
+  results HealthCheckResult[]
+}
+
+/// One health-check tick for one target — kept as history (unlike the
+/// Registry's own polling, which only ever holds the latest status), so
+/// uptime/response-time trends are actually answerable.
+model HealthCheckResult {
+  id             String       @id @default(uuid())
+  targetId       String
+  target         HealthTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  status         HealthStatus
+  responseTimeMs Int?
+  error          String?
+  checkedAt      DateTime     @default(now())
+
+  @@index([targetId])
+  @@index([checkedAt])
+}

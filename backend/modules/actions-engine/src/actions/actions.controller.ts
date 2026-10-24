@@ -1,11 +1,19 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
-import { envelope } from '@elyvion/shared';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, NotFoundException, Param, Post } from '@nestjs/common';
+import { checkAuthorization, envelope, logEvent } from '@elyvion/shared';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ActionMetadata } from './action.types';
 import { ActionsRegistry } from './actions.registry';
 import { registerFrontendActionSchema, registerRemoteActionSchema } from './dto/actions.dto';
 import { FrontendActionsService } from './frontend-actions.service';
 import { RemoteActionsService } from './remote-actions.service';
+
+const LOGGING_URL = process.env.LOGGING_URL ?? 'http://localhost:3018';
+const SECURITY_URL = process.env.SECURITY_URL ?? 'http://localhost:3022';
+
+interface SubjectContext {
+  subjectId?: string;
+  subjectType?: 'user' | 'agent';
+}
 
 /**
  * `zodToJsonSchema`'s generic signature hits TS's type-instantiation depth
@@ -74,20 +82,57 @@ export class ActionsController {
     return envelope(frontendEntry);
   }
 
+  /**
+   * The one place every backend action actually runs (in-process or
+   * remote-proxied) — so it's also the one place that logs every call,
+   * success or failure, instead of each action's own implementation
+   * having to remember to ("eigentlich sollte wirklich alles geloggt
+   * werden"), AND the one place that checks "darf der Agent/Benutzer
+   * das?" against `security` before running, for whichever actions
+   * declare a `requiredPermission` ("jede Action muss exposen, welche
+   * Berechtigung erforderlich ist"). `FrontendActionsService.execute`
+   * does both the same way for frontend-target actions, on the browser
+   * side. Subject identity comes from headers, not the body, so it
+   * never collides with the action's own input shape — see
+   * `x-subject-id`/`x-subject-type`.
+   */
   @Post('execute/:key')
-  async execute(@Param('key') key: string, @Body() body: unknown) {
+  async execute(
+    @Param('key') key: string,
+    @Body() body: unknown,
+    @Headers('x-subject-id') subjectId?: string,
+    @Headers('x-subject-type') subjectType?: 'user' | 'agent',
+  ) {
+    const subject: SubjectContext = { subjectId, subjectType };
+
     const entry = this.registry.get(key);
     if (entry) {
+      await this.assertAuthorized(key, entry.metadata.requiredPermission, subject);
       const parsed = entry.metadata.inputSchema.safeParse(body ?? {});
       if (!parsed.success) {
         throw new BadRequestException(parsed.error.issues);
       }
-      return envelope(await entry.handler.run(parsed.data));
+      try {
+        const output = await entry.handler.run(parsed.data);
+        void this.logExecution(key, 'info', parsed.data, output);
+        return envelope(output);
+      } catch (error) {
+        void this.logExecution(key, 'error', parsed.data, undefined, error);
+        throw error;
+      }
     }
 
     const remoteEntry = await this.remoteActions.findOne(key);
     if (remoteEntry) {
-      return envelope(await this.remoteActions.execute(remoteEntry, (body ?? {}) as Record<string, unknown>));
+      await this.assertAuthorized(key, remoteEntry.requiredPermission, subject);
+      try {
+        const output = await this.remoteActions.execute(remoteEntry, (body ?? {}) as Record<string, unknown>);
+        void this.logExecution(key, 'info', body, output);
+        return envelope(output);
+      } catch (error) {
+        void this.logExecution(key, 'error', body, undefined, error);
+        throw error;
+      }
     }
 
     const frontendEntry = await this.frontendActions.findOne(key);
@@ -97,6 +142,36 @@ export class ActionsController {
       );
     }
     throw new NotFoundException(`Action "${key}" wurde nicht gefunden.`);
+  }
+
+  private async assertAuthorized(
+    actionKey: string,
+    requiredPermission: string | undefined,
+    subject: SubjectContext,
+  ): Promise<void> {
+    if (!requiredPermission) return;
+    const result = await checkAuthorization({ securityUrl: SECURITY_URL, requiredPermission, ...subject });
+    if (!result.allowed) {
+      void this.logExecution(actionKey, 'error', subject, undefined, `Autorisierung verweigert: ${result.reason}`);
+      throw new ForbiddenException(`Nicht autorisiert für Action "${actionKey}": ${result.reason}`);
+    }
+  }
+
+  private async logExecution(
+    actionKey: string,
+    level: 'info' | 'error',
+    input: unknown,
+    output?: unknown,
+    error?: unknown,
+  ): Promise<void> {
+    await logEvent({
+      loggingUrl: LOGGING_URL,
+      source: 'actions-engine',
+      level,
+      message: level === 'info' ? `Action "${actionKey}" ausgeführt.` : `Action "${actionKey}" fehlgeschlagen.`,
+      actionKey,
+      context: { input, output, error: error instanceof Error ? error.message : error ? String(error) : undefined },
+    });
   }
 
   @Post('frontend-actions')

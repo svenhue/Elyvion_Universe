@@ -1,0 +1,90 @@
+<div class="flex h-screen w-screen overflow-hidden bg-white font-sans text-slate-900">
+  <nav class="flex w-48 shrink-0 flex-col gap-1 border-r border-slate-200 bg-slate-950 p-3 text-sm">
+    <a
+      routerLink="/"
+      [routerLinkActiveOptions]="{ exact: true }"
+      routerLinkActive="bg-slate-800"
+      class="mb-3 grid size-7 shrink-0 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white"
+    >E</a>
+
+    <div class="relative mb-3">
+      <input
+        class="w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-indigo-400"
+        placeholder="Suchen & springen…"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)"
+      />
+      @if (searchResults().length) {
+        <div class="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-md border border-slate-700 bg-slate-900 shadow-xl">
+          @for (result of searchResults(); track result.url) {
+            <a
+              [routerLink]="result.url"
+              (click)="clearSearch()"
+              class="block px-2.5 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+            >
+              {{ result.name }}
+              @if (result.path) {
+                <span class="text-slate-500">· {{ result.path }}</span>
+              }
+            </a>
+          }
+        </div>
+      }
+    </div>
+
+    <a
+      routerLink="/pro-code"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >App-Builder</a>
+    <a
+      routerLink="/workflows"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Workflows</a>
+    <a
+      routerLink="/ontologies"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Ontologien</a>
+    <a
+      routerLink="/agents"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >AI Agents</a>
+    <a
+      routerLink="/data"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Data</a>
+    <a
+      routerLink="/actions"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Actions</a>
+    <a
+      routerLink="/logging"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Logging</a>
+    <a
+      routerLink="/data-adapters"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Data-Adapters</a>
+    <a
+      routerLink="/telemetry"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Telemetry</a>
+    <a
+      routerLink="/deployments"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Deployments</a>
+  </nav>
+  <div class="min-w-0 flex-1">
+    <router-outlet />
+  </div>
+  <elv-assistant-widget />
+</div>

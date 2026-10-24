@@ -1,0 +1,52 @@
+<main class="h-full w-full overflow-y-auto bg-white p-6 font-sans text-slate-900">
+  <div class="mb-4 flex items-center gap-2">
+    <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+    <h1 class="text-lg font-semibold">Telemetry</h1>
+  </div>
+
+  @if (loadError()) {
+    <p class="mb-3 rounded-md bg-rose-50 p-2 text-xs text-rose-700">{{ loadError() }}</p>
+  }
+
+  <table class="w-full border-collapse text-sm">
+    <thead>
+      <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+        <th class="py-2">Status</th>
+        <th class="py-2">Name</th>
+        <th class="py-2">Quelle</th>
+        <th class="py-2">URL</th>
+        <th class="py-2">Antwortzeit</th>
+        <th class="py-2">Zuletzt geprüft</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (target of targets(); track target.id) {
+        <tr class="border-b border-slate-100">
+          <td class="py-2">
+            @if (target.latest) {
+              <span
+                class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                [class.bg-emerald-100]="target.latest.status === 'up'"
+                [class.text-emerald-700]="target.latest.status === 'up'"
+                [class.bg-rose-100]="target.latest.status === 'down'"
+                [class.text-rose-700]="target.latest.status === 'down'"
+              >
+                <span class="size-1.5 rounded-full" [class.bg-emerald-500]="target.latest.status === 'up'" [class.bg-rose-500]="target.latest.status === 'down'"></span>
+                {{ target.latest.status }}
+              </span>
+            } @else {
+              <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase text-slate-400">unbekannt</span>
+            }
+          </td>
+          <td class="py-2 font-medium">{{ target.name }}</td>
+          <td class="py-2 text-slate-500">{{ target.source }}</td>
+          <td class="py-2 text-slate-400">{{ target.url }}</td>
+          <td class="py-2 text-slate-500">{{ target.latest?.responseTimeMs ?? '—' }} ms</td>
+          <td class="py-2 text-slate-400">{{ target.latest?.checkedAt ? (target.latest!.checkedAt | date: 'short') : '—' }}</td>
+        </tr>
+      } @empty {
+        <tr><td colspan="6" class="py-10 text-center text-slate-400">Noch keine Ziele bekannt.</td></tr>
+      }
+    </tbody>
+  </table>
+</main>

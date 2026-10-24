@@ -37,6 +37,10 @@ export class RemoteAction {
   @Prop({ required: true, enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], default: 'POST' })
   method!: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+  /** `"resourceKey:permissionKey"`, checked against the `security` module before this action runs — see `ActionsController.execute`. Absent means "no gate" (most built-in/diagnostic actions). */
+  @Prop()
+  requiredPermission?: string;
+
   @Prop({ default: Date.now })
   updatedAt!: Date;
 }

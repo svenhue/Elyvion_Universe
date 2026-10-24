@@ -1,4 +1,8 @@
 import { Injectable, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { ApiClientService } from '../api/api-client.service';
+import { AuthService } from '../auth/auth.service';
 import { ActionsApiService } from './actions-api.service';
 
 export interface FrontendActionDefinition<TInput = Record<string, unknown>, TOutput = unknown> {
@@ -7,7 +11,14 @@ export interface FrontendActionDefinition<TInput = Record<string, unknown>, TOut
   description: string;
   category?: string;
   inputSchema: Record<string, unknown>;
+  /** `"resourceKey:permissionKey"` — checked against `security` before this action runs, if set. */
+  requiredPermission?: string;
   run(input: TInput): Promise<TOutput> | TOutput;
+}
+
+interface AuthorizeResult {
+  allowed: boolean;
+  reason: string;
 }
 
 /**
@@ -22,6 +33,8 @@ export interface FrontendActionDefinition<TInput = Record<string, unknown>, TOut
 @Injectable({ providedIn: 'root' })
 export class FrontendActionsService {
   private readonly api = inject(ActionsApiService);
+  private readonly apiClient = inject(ApiClientService);
+  private readonly auth = inject(AuthService);
   private readonly actions = new Map<string, FrontendActionDefinition>();
   private builtinsRegistered = false;
 
@@ -34,6 +47,7 @@ export class FrontendActionsService {
         description: definition.description,
         category: definition.category,
         inputSchema: definition.inputSchema,
+        requiredPermission: definition.requiredPermission,
       })
       .subscribe({
         error: (error: unknown) =>
@@ -41,12 +55,65 @@ export class FrontendActionsService {
       });
   }
 
+  /**
+   * The one place every frontend action actually runs — so it's also the
+   * one place that checks "darf der Benutzer das?" against `security`
+   * (for actions that declare a `requiredPermission`) and logs every
+   * call, success or failure, same as actions-engine's
+   * `ActionsController.execute` does for backend ones ("eigentlich
+   * sollte wirklich alles geloggt werden").
+   */
   async execute(key: string, input: Record<string, unknown> = {}): Promise<unknown> {
     const definition = this.actions.get(key);
     if (!definition) {
       throw new Error(`Frontend-Action "${key}" ist in diesem Tab nicht registriert.`);
     }
-    return definition.run(input);
+    if (definition.requiredPermission) {
+      const result = await this.checkAuthorization(definition.requiredPermission);
+      if (!result.allowed) {
+        this.logExecution(key, 'error', input, undefined, `Autorisierung verweigert: ${result.reason}`);
+        throw new Error(`Nicht autorisiert für Action "${key}": ${result.reason}`);
+      }
+    }
+    try {
+      const output = await definition.run(input);
+      this.logExecution(key, 'info', input, output);
+      return output;
+    } catch (error) {
+      this.logExecution(key, 'error', input, undefined, error);
+      throw error;
+    }
+  }
+
+  private async checkAuthorization(requiredPermission: string): Promise<AuthorizeResult> {
+    const [resourceKey, permissionKey] = requiredPermission.split(':');
+    const subjectId = this.auth.claims()?.['sub'] as string | undefined;
+    try {
+      return await firstValueFrom(
+        this.apiClient
+          .post<AuthorizeResult>('security', '/authorize', {
+            resourceKey,
+            permissionKey,
+            subjectId,
+            subjectType: subjectId ? 'user' : undefined,
+          })
+          .pipe(map((response) => response.data)),
+      );
+    } catch (error) {
+      return { allowed: true, reason: `security module unreachable, failing open: ${error}` };
+    }
+  }
+
+  private logExecution(actionKey: string, level: 'info' | 'error', input: unknown, output?: unknown, error?: unknown): void {
+    this.apiClient
+      .post('logging', '/logs', {
+        source: 'frontend',
+        level,
+        message: level === 'info' ? `Action "${actionKey}" ausgeführt.` : `Action "${actionKey}" fehlgeschlagen.`,
+        actionKey,
+        context: { input, output, error: error instanceof Error ? error.message : error ? String(error) : undefined },
+      })
+      .subscribe({ error: () => undefined });
   }
 
   has(key: string): boolean {

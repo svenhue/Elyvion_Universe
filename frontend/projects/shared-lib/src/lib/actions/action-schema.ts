@@ -5,6 +5,8 @@ export interface ActionDescriptor {
   description: string;
   category?: string;
   inputSchema: Record<string, unknown>;
+  /** `"resourceKey:permissionKey"` — checked against `security` before this action runs, if set. */
+  requiredPermission?: string;
   target: 'backend' | 'frontend';
 }
 
@@ -14,4 +16,5 @@ export interface RegisterFrontendActionPayload {
   description: string;
   category?: string;
   inputSchema: Record<string, unknown>;
+  requiredPermission?: string;
 }

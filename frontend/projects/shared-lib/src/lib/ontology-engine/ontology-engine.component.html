@@ -180,10 +180,36 @@
                 <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeEdge(edge.id)">×</button>
               </div>
             } @empty {
-              <p class="text-[10px] text-slate-300">
-                Keine Beziehungen. Über dem Node schweben, dann vom Griff zu einer anderen Box ziehen.
-              </p>
+              <p class="text-[10px] text-slate-300">Noch keine Beziehungen.</p>
             }
+
+            <div class="grid grid-cols-[1fr_1fr_auto] gap-1 pt-1">
+              <select
+                class="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] outline-none focus:border-indigo-400"
+                [ngModel]="newEdgeTargetId()"
+                (ngModelChange)="newEdgeTargetId.set($event)"
+              >
+                <option value="">Ziel wählen…</option>
+                @for (other of connectableNodes(); track other.id) {
+                  <option [value]="other.id">{{ other.name }}</option>
+                }
+              </select>
+              <input
+                class="rounded-md border border-slate-200 px-1.5 py-1 text-[11px] outline-none focus:border-indigo-400"
+                placeholder="Typ (z. B. relates_to)"
+                [ngModel]="newEdgeType()"
+                (ngModelChange)="newEdgeType.set($event)"
+              />
+              <button
+                type="button"
+                class="rounded-md bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+                [disabled]="!newEdgeTargetId()"
+                (click)="createRelationshipFromPanel()"
+              >
+                Verbinden
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-300">Oder: über dem Node schweben und vom Griff zu einer anderen Box ziehen.</p>
           </div>
         </div>
       } @else if (selectedEdge(); as edge) {

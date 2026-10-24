@@ -17,6 +17,8 @@ export interface ActionMetadata {
   category?: string;
   inputSchema: AnyZodObject;
   outputSchema?: ZodTypeAny;
+  /** `"resourceKey:permissionKey"` — checked against the `security` module before this action runs. Omit for actions that don't need gating. */
+  requiredPermission?: string;
 }
 
 export interface ActionHandler<TInput = unknown, TOutput = unknown> {

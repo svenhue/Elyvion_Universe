@@ -38,6 +38,22 @@ export const routes: Routes = [
           path: 'actions',
           loadComponent: () => import('@elyvion/shared-lib').then((module) => module.ActionsPageComponent),
         },
+        {
+          path: 'logging',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.LoggingPageComponent),
+        },
+        {
+          path: 'data-adapters',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.DataAdaptersComponent),
+        },
+        {
+          path: 'telemetry',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.TelemetryComponent),
+        },
+        {
+          path: 'deployments',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.DeploymentEngineComponent),
+        },
       ],
     },
     { path: 'admin', children: elvAdminRoutes },

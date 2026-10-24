@@ -10,6 +10,7 @@ export interface RemoteActionDescriptor {
   description: string;
   category?: string;
   inputSchema: Record<string, unknown>;
+  requiredPermission?: string;
   /** Reported as `"backend"`, same as an in-process action — a caller shouldn't have to care that this one's handler lives in another module. */
   target: 'backend';
 }
@@ -103,6 +104,7 @@ function toDescriptor(doc: RemoteAction): RemoteActionDescriptor {
     description: doc.description,
     category: doc.category,
     inputSchema: doc.inputSchema,
+    requiredPermission: doc.requiredPermission,
     target: 'backend',
   };
 }

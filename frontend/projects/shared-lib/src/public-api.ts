@@ -77,6 +77,15 @@ export * from './lib/actions/action-schema';
 export * from './lib/actions/actions-api.service';
 export * from './lib/actions/frontend-actions.service';
 export * from './lib/actions/actions-page.component';
+export * from './lib/actions/actions.nav';
+
+export * from './lib/navigation/nav-item';
+export * from './lib/navigation/navigation-registry.service';
+export * from './lib/pro-code/pro-code.nav';
+export * from './lib/workflow/workflow.nav';
+export * from './lib/ontology-engine/ontology-engine.nav';
+export * from './lib/agent-engine/agent-engine.nav';
+export * from './lib/data-engine/data-engine.nav';
 
 export * from './lib/assistant/assistant-widget.component';
 
@@ -90,3 +99,23 @@ export * from './lib/agent-engine/agent-engine.component';
 export * from './lib/data-engine/data-engine-schema';
 export * from './lib/data-engine/data-engine-api.service';
 export * from './lib/data-engine/data-engine.component';
+
+export * from './lib/logging/logging-schema';
+export * from './lib/logging/logging-api.service';
+export * from './lib/logging/logging-page.component';
+export * from './lib/logging/logging.nav';
+
+export * from './lib/data-adapters/data-adapters-schema';
+export * from './lib/data-adapters/data-adapters-api.service';
+export * from './lib/data-adapters/data-adapters.component';
+export * from './lib/data-adapters/data-adapters.nav';
+
+export * from './lib/telemetry/telemetry-schema';
+export * from './lib/telemetry/telemetry-api.service';
+export * from './lib/telemetry/telemetry.component';
+export * from './lib/telemetry/telemetry.nav';
+
+export * from './lib/deployment-engine/deployment-engine-schema';
+export * from './lib/deployment-engine/deployment-engine-api.service';
+export * from './lib/deployment-engine/deployment-engine.component';
+export * from './lib/deployment-engine/deployment-engine.nav';

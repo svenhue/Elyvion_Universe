@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubjectType {
+  user
+  agent
+}
+
+enum AccessEffect {
+  allow
+  deny
+}
+
+/// One backend module = one Resource — self-registered by the module
+/// itself, the same way it self-registers its actions with actions-engine.
+model Resource {
+  id          String       @id @default(uuid())
+  key         String       @unique
+  name        String
+  description String?
+  permissions Permission[]
+  createdAt   DateTime     @default(now())
+}
+
+/// One grantable capability within a Resource (e.g. data-adapters:
+/// create_data_adapter) — modules expose these alongside their actions and
+/// assign one to each action that needs gating.
+model Permission {
+  id                String             @id @default(uuid())
+  resourceId        String
+  resource          Resource           @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  key               String
+  name              String
+  description       String?
+  createdAt         DateTime           @default(now())
+  rolePermissions   RolePermission[]
+  objectPermissions ObjectPermission[]
+
+  @@unique([resourceId, key])
+}
+
+/// A named set of permissions. Roles can inherit from other roles
+/// (`RoleInheritance`) — "eine Rolle kann die Rechte von anderen Rollen
+/// erben" — so a role's *effective* permissions are its own direct grants
+/// plus everything every ancestor role grants, resolved at
+/// authorization time (see `authorization/role-resolver.service.ts`).
+model Role {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+  permissions RolePermission[]
+  assignments RoleAssignment[]
+
+  /// Roles this role directly inherits from.
+  parentsOf RoleInheritance[] @relation("ChildRole")
+  /// Roles that directly inherit from this role.
+  childrenOf RoleInheritance[] @relation("ParentRole")
+}
+
+model RoleInheritance {
+  id           String @id @default(uuid())
+  childRoleId  String
+  childRole    Role   @relation("ChildRole", fields: [childRoleId], references: [id], onDelete: Cascade)
+  parentRoleId String
+  parentRole   Role   @relation("ParentRole", fields: [parentRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([childRoleId, parentRoleId])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+/// Who has which role — a "subject" is a user or an agent, never just a
+/// user, since agents are first-class actors that execute actions too.
+model RoleAssignment {
+  id          String      @id @default(uuid())
+  subjectId   String
+  subjectType SubjectType
+  roleId      String
+  role        Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+
+  @@unique([subjectId, roleId])
+  @@index([subjectId])
+}
+
+/// Instance-level override on top of the role-based decision — "wenn ich
+/// eine externe Datenquelle anschließe, dürfen Agenten nur auf bestimmte
+/// Objekte zugreifen (oder auf bestimmte Objekte keinen Zugriff haben)".
+/// Each rule is local to its own object: a `deny` always blocks that one
+/// object regardless of the role grant (a pure blacklist), and an `allow`
+/// only matters when the role itself doesn't grant the permission at all
+/// (a standalone whitelist entry) — see `authorization.service.ts` for
+/// the exact resolution order.
+model ObjectPermission {
+  id           String       @id @default(uuid())
+  subjectId    String
+  subjectType  SubjectType
+  permissionId String
+  permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  objectId     String
+  effect       AccessEffect
+  createdAt    DateTime     @default(now())
+
+  @@unique([subjectId, permissionId, objectId])
+  @@index([subjectId, permissionId])
+}
