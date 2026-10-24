@@ -1,0 +1,87 @@
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-80 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
+    <div class="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Actions</h1>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+      @if (loadError()) {
+        <p class="mb-2 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700">{{ loadError() }}</p>
+      }
+      @for (group of groupedActions(); track group[0]) {
+        <p class="mb-1 mt-3 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 first:mt-0">{{ group[0] }}</p>
+        @for (action of group[1]; track action.key) {
+          <button
+            type="button"
+            class="mb-2 flex w-full flex-col items-start gap-0.5 rounded-lg border p-3 text-left hover:border-indigo-400/60"
+            [class.border-indigo-500]="selectedAction()?.key === action.key"
+            [class.border-slate-200]="selectedAction()?.key !== action.key"
+            (click)="selectAction(action)"
+          >
+            <span class="text-xs font-medium text-slate-900">{{ action.name }}</span>
+            <span class="text-[10px] text-slate-500">{{ action.key }} · {{ action.target }}</span>
+          </button>
+        }
+      } @empty {
+        <p class="px-2 py-6 text-center text-xs text-slate-400">Keine Actions gefunden.</p>
+      }
+    </div>
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6">
+    @if (selectedAction(); as action) {
+      <div class="mx-auto max-w-xl space-y-4">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">{{ action.name }}</h2>
+          <p class="text-xs text-slate-500">{{ action.key }} · {{ action.category ?? 'Sonstige' }} · {{ action.target }}</p>
+        </div>
+        <p class="text-sm text-slate-600">{{ action.description }}</p>
+
+        <div class="space-y-3 rounded-lg border border-slate-200 p-4">
+          @for (field of formFields(); track field.key) {
+            <label class="block space-y-1 text-[11px] text-slate-500">
+              {{ field.key }}{{ field.required ? ' *' : '' }}
+              <span class="ml-1 text-slate-300">({{ field.type }})</span>
+              @if (field.type === 'object' || field.type === 'array') {
+                <textarea
+                  class="min-h-24 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs outline-none focus:border-indigo-400"
+                  [placeholder]="field.type === 'array' ? '[...]' : '{...}'"
+                  [ngModel]="field.value"
+                  (ngModelChange)="updateField(field.key, $event)"
+                ></textarea>
+              } @else {
+                <input
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                  [ngModel]="field.value"
+                  (ngModelChange)="updateField(field.key, $event)"
+                />
+              }
+            </label>
+          } @empty {
+            <p class="text-xs text-slate-400">Diese Action braucht keine Eingabe.</p>
+          }
+
+          <button
+            type="button"
+            class="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            [disabled]="running()"
+            (click)="runSelectedAction()"
+          >{{ running() ? 'Läuft…' : 'Ausführen' }}</button>
+
+          @if (runResult(); as result) {
+            @if (result.success) {
+              <pre class="overflow-x-auto rounded-md bg-emerald-50 p-3 text-[11px] text-emerald-800">{{ result.output | json }}</pre>
+            } @else {
+              <p class="rounded-md bg-rose-50 p-3 text-xs text-rose-700">{{ result.error }}</p>
+            }
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="flex h-full items-center justify-center">
+        <p class="text-sm text-slate-400">Wähle links eine Action aus.</p>
+      </div>
+    }
+  </div>
+</main>

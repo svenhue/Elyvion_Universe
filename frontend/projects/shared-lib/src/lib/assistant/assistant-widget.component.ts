@@ -12,7 +12,7 @@ type AssistantTab = 'chat' | 'actions';
 
 interface ActionFormField {
   key: string;
-  type: 'string' | 'number' | 'boolean';
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
   required: boolean;
   value: string;
 }
@@ -123,7 +123,7 @@ export class AssistantWidgetComponent implements OnInit {
     this.formFields.set(
       Object.entries(properties).map(([key, def]) => ({
         key,
-        type: def.type === 'number' || def.type === 'boolean' ? def.type : 'string',
+        type: isActionFormFieldType(def.type) ? def.type : 'string',
         required: required.has(key),
         value: '',
       })),
@@ -240,9 +240,15 @@ export class AssistantWidgetComponent implements OnInit {
   }
 }
 
+function isActionFormFieldType(type: string | undefined): type is ActionFormField['type'] {
+  return type === 'number' || type === 'boolean' || type === 'object' || type === 'array';
+}
+
+/** Object/array fields are edited as JSON text — parsed here, not sent as a literal string. */
 function coerceField(field: ActionFormField): unknown {
   if (field.type === 'number') return Number(field.value) || 0;
   if (field.type === 'boolean') return field.value === 'true';
+  if (field.type === 'object' || field.type === 'array') return JSON.parse(field.value);
   return field.value;
 }
 

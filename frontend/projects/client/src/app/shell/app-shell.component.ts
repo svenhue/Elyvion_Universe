@@ -4,8 +4,9 @@ import { AssistantWidgetComponent, FrontendActionsService } from '@elyvion/share
 
 /**
  * Persistent left-hand nav (Home / App-Builder / Workflows / Ontologien /
- * AI Agents / Data) wrapping every non-admin page, with a router-outlet
- * filling the rest of the viewport to its right for the page itself. Lives in the client app,
+ * AI Agents / Data / Actions) wrapping every non-admin page, with a
+ * router-outlet filling the rest of the viewport to its right for the
+ * page itself. Lives in the client app,
  * not shared-lib — the route set it links to is this app's own, not
  * something a generic host app would share.
  *
@@ -52,6 +53,11 @@ import { AssistantWidgetComponent, FrontendActionsService } from '@elyvion/share
           routerLinkActive="bg-slate-800 text-white"
           class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
         >Data</a>
+        <a
+          routerLink="/actions"
+          routerLinkActive="bg-slate-800 text-white"
+          class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+        >Actions</a>
       </nav>
       <div class="min-w-0 flex-1">
         <router-outlet />

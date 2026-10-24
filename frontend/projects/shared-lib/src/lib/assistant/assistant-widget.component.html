@@ -123,11 +123,20 @@
               @for (field of formFields(); track field.key) {
                 <label class="block space-y-1 text-[10px] text-slate-500">
                   {{ field.key }}{{ field.required ? ' *' : '' }}
-                  <input
-                    class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs outline-none focus:border-indigo-400"
-                    [ngModel]="field.value"
-                    (ngModelChange)="updateField(field.key, $event)"
-                  />
+                  @if (field.type === 'object' || field.type === 'array') {
+                    <textarea
+                      class="min-h-16 w-full rounded-md border border-slate-200 px-2 py-1 font-mono text-xs outline-none focus:border-indigo-400"
+                      [placeholder]="field.type === 'array' ? '[...]' : '{...}'"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateField(field.key, $event)"
+                    ></textarea>
+                  } @else {
+                    <input
+                      class="w-full rounded-md border border-slate-200 px-2 py-1 text-xs outline-none focus:border-indigo-400"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateField(field.key, $event)"
+                    />
+                  }
                 </label>
               }
               <button

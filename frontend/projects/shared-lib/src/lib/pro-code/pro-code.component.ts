@@ -13,6 +13,7 @@ import { AppVariable, AppVariableType } from '../application-runner/state/app-va
 import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
 import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.directive';
 import { AppOntologySyncService } from '../application-runner/ontology-sync.service';
+import { FrontendActionsService } from '../actions/frontend-actions.service';
 
 const EMPTY_SCHEMA: DynamicAppSchema = {
   id: 'default',
@@ -133,12 +134,16 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   private readonly dynamicAppService = inject(DynamicAppService);
   private readonly api = inject(ApiClientService);
   private readonly ontologySync = inject(AppOntologySyncService);
+  private readonly frontendActions = inject(FrontendActionsService);
   private readonly saveRequests = new Subject<DynamicAppSchema>();
   private readonly historyRequests = new Subject<string>();
   private readonly previewRequests = new Subject<PreviewRequest>();
+  /** Guards the three "live" actions below against running once this instance is gone — opening /pro-code again registers a fresh instance that takes over, but an agent calling one in between should get a clear error, not silently act on a dead component. */
+  private isMounted = true;
 
   constructor() {
     this.syncConfiguredElements(EMPTY_SCHEMA);
+    this.registerApplicationRunnerActions();
     this.previewRequests
       .pipe(debounceTime(150))
       .subscribe(({ code, schema }) => {
@@ -206,9 +211,108 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.isMounted = false;
     this.saveRequests.complete();
     this.historyRequests.complete();
     this.previewRequests.complete();
+  }
+
+  /**
+   * The Application Runner's own action exposure — "frontend-target"
+   * because they only make sense while a human (or an agent, through the
+   * same registry) actually has /pro-code open: they read/mutate this
+   * component's own live, possibly-unsaved schema state, the same state
+   * the canvas renders from, not the persisted one app-config's
+   * get_app_schema/add_element/update_element actions operate on.
+   */
+  private registerApplicationRunnerActions(): void {
+    this.frontendActions.register({
+      key: 'read_current_app',
+      name: 'Geöffnete Anwendung lesen',
+      description: 'Liest das Schema der aktuell im App-Builder geöffneten Anwendung, inklusive ungespeicherter Änderungen.',
+      category: 'application-runner',
+      inputSchema: { type: 'object', properties: {} },
+      run: async () => {
+        this.assertMounted();
+        const schema = this.parseSchema();
+        if (!schema) throw new Error('Das aktuelle Schema ist syntaktisch ungültig.');
+        return schema;
+      },
+    });
+
+    this.frontendActions.register({
+      key: 'add_element_live',
+      name: 'Element live hinzufügen',
+      description: 'Fügt der aktuell im App-Builder geöffneten Anwendung sofort sichtbar ein neues Element als Kind eines bestehenden Elements hinzu.',
+      category: 'application-runner',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          parentId: { type: 'string', description: 'Id des Eltern-Elements.' },
+          element: { type: 'object', description: 'Das neue ComponentNode-Objekt (id, type, element/name/text, attributes, …).' },
+        },
+        required: ['parentId', 'element'],
+      },
+      run: async (input: { parentId: string; element: DynamicComponentNode }) => {
+        this.assertMounted();
+        return this.addElementLive(input.parentId, input.element);
+      },
+    });
+
+    this.frontendActions.register({
+      key: 'update_element_live',
+      name: 'Element live bearbeiten',
+      description: 'Ändert Felder (inkl. attributes, die zusammengeführt statt ersetzt werden) eines Elements in der aktuell im App-Builder geöffneten Anwendung sofort sichtbar.',
+      category: 'application-runner',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          elementId: { type: 'string' },
+          patch: { type: 'object', description: 'Zu ändernde Felder des Elements.' },
+        },
+        required: ['elementId', 'patch'],
+      },
+      run: async (input: { elementId: string; patch: Record<string, unknown> }) => {
+        this.assertMounted();
+        return this.updateElementLive(input.elementId, input.patch);
+      },
+    });
+  }
+
+  private assertMounted(): void {
+    if (!this.isMounted) {
+      throw new Error('Der App-Builder ist aktuell nicht geöffnet — bitte zuerst /pro-code öffnen.');
+    }
+  }
+
+  private addElementLive(parentId: string, element: DynamicComponentNode): DynamicAppSchema {
+    const schema = this.parseSchema();
+    if (!schema) throw new Error('Das aktuelle Schema ist syntaktisch ungültig.');
+    if (schema.components.some((node) => node.id === element.id)) {
+      throw new Error(`Element "${element.id}" existiert bereits.`);
+    }
+    const parent = schema.components.find((node) => node.id === parentId);
+    if (!parent) throw new Error(`Eltern-Element "${parentId}" wurde nicht gefunden.`);
+
+    schema.components.push(element);
+    parent.children = [...(parent.children ?? []), element.id];
+    this.writeSchema(schema);
+    return schema;
+  }
+
+  private updateElementLive(elementId: string, patch: Record<string, unknown>): DynamicAppSchema {
+    const schema = this.parseSchema();
+    if (!schema) throw new Error('Das aktuelle Schema ist syntaktisch ungültig.');
+    const node = schema.components.find((candidate) => candidate.id === elementId);
+    if (!node) throw new Error(`Element "${elementId}" wurde nicht gefunden.`);
+
+    const patchedAttributes =
+      patch['attributes'] && typeof patch['attributes'] === 'object'
+        ? { ...(node.attributes ?? {}), ...(patch['attributes'] as Record<string, unknown>) }
+        : node.attributes;
+    Object.assign(node, patch, { id: elementId, attributes: patchedAttributes });
+    this.writeSchema(schema);
+    return schema;
   }
 
   togglePanel(panel: 'elements' | 'schema' | 'history' | 'variables'): void {

@@ -6,6 +6,7 @@ import { ApiClientService } from '../api/api-client.service';
 import { ELYVION_GATEWAY_URL } from '../api/gateway-url.token';
 import { AuthService } from '../auth/auth.service';
 import { DynamicAppService } from '../application-runner/service/dynamic-app.service';
+import { FrontendActionsService } from '../actions/frontend-actions.service';
 import { ProCodeComponent } from './pro-code.component';
 import { UI_ELEMENT_CATALOG } from './ui-element-catalog';
 
@@ -21,6 +22,8 @@ describe('ProCodeComponent', () => {
         { provide: DynamicAppService, useValue: { loadApplication: () => of(null) } },
         { provide: ApiClientService, useValue: { put: () => of({ data: {} }) } },
         { provide: ELYVION_GATEWAY_URL, useValue: 'http://localhost:3000' },
+        // Registering the Application Runner's live actions isn't what these tests exercise — a no-op keeps them from needing a full ApiClientService mock.
+        { provide: FrontendActionsService, useValue: { register: () => undefined } },
       ],
     });
     component = TestBed.runInInjectionContext(() => new ProCodeComponent());

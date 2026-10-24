@@ -76,6 +76,7 @@ export * from './lib/ontology-engine/platform-environment-settings.component';
 export * from './lib/actions/action-schema';
 export * from './lib/actions/actions-api.service';
 export * from './lib/actions/frontend-actions.service';
+export * from './lib/actions/actions-page.component';
 
 export * from './lib/assistant/assistant-widget.component';
 

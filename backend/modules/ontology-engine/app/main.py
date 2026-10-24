@@ -87,6 +87,77 @@ async def lifespan(app: FastAPI):
             },
         )
     )
+
+    # Write actions — what an agent whose job is building ontologies
+    # (not just reading them for reference) actually needs.
+    await register_remote_action(
+        RegisterRemoteActionOptions(
+            actions_engine_url=settings.actions_engine_url,
+            key="create_ontology",
+            name="Ontologie anlegen",
+            description="Legt eine neue, leere Ontologie an (key, name, optional type).",
+            category="ontology-engine",
+            module_name=settings.module_name,
+            path="/ontologies",
+            method="POST",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "type": {"type": "string", "description": "z. B. angular_app_config, elyvion_platform_environment, custom."},
+                },
+                "required": ["key", "name"],
+            },
+        )
+    )
+    await register_remote_action(
+        RegisterRemoteActionOptions(
+            actions_engine_url=settings.actions_engine_url,
+            key="add_ontology_node",
+            name="Ontologie-Node hinzufügen",
+            description="Fügt einer Ontologie einen neuen Node hinzu (type, name, attributes — nur Skalare, keine verschachtelten Objekte).",
+            category="ontology-engine",
+            module_name=settings.module_name,
+            path="/ontologies/{key}/nodes",
+            method="POST",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Key der Ziel-Ontologie."},
+                    "type": {"type": "string"},
+                    "name": {"type": "string"},
+                    "attributes": {"type": "object", "description": "Nur Skalare (string/number/boolean) als Werte."},
+                    "id": {"type": "string", "description": "Optional — eigene Id für Upsert-Verhalten."},
+                },
+                "required": ["key", "type", "name"],
+            },
+        )
+    )
+    await register_remote_action(
+        RegisterRemoteActionOptions(
+            actions_engine_url=settings.actions_engine_url,
+            key="add_ontology_edge",
+            name="Ontologie-Kante hinzufügen",
+            description="Verbindet zwei bestehende Nodes einer Ontologie mit einer gerichteten, typisierten Kante.",
+            category="ontology-engine",
+            module_name=settings.module_name,
+            path="/ontologies/{key}/edges",
+            method="POST",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Key der Ziel-Ontologie."},
+                    "source_id": {"type": "string"},
+                    "target_id": {"type": "string"},
+                    "type": {"type": "string"},
+                    "attributes": {"type": "object"},
+                },
+                "required": ["key", "source_id", "target_id", "type"],
+            },
+        )
+    )
     yield
     scheduler.shutdown(wait=False)
     await disconnect()
