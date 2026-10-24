@@ -6,7 +6,7 @@ export class Conversation {
   @Prop({ required: true, default: 'Neue Unterhaltung' })
   title!: string;
 
-  /** `"agent"` conversations are accepted and stored, but `ChatService.postMessage` 400s on them until `agent-engine` exists (next phase) to actually run one. */
+  /** `"chat"` replies via the LLM directly; `"agent"` runs a multi-agent system via `agent-engine` (see `ChatService.postMessage` / `AgentEngineClient`). */
   @Prop({ required: true, enum: ['chat', 'agent'], default: 'chat' })
   mode!: 'chat' | 'agent';
 

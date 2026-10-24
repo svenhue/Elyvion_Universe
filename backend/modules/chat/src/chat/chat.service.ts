@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { AgentEngineClient, formatAgentRunResult } from './agent-engine/agent-engine-client.service';
 import { CreateConversationDto } from './dto/chat.dto';
 import { LlmService } from './llm/llm.service';
 import { Conversation, ConversationDocument } from './schemas/conversation.schema';
@@ -28,6 +29,7 @@ export class ChatService {
     @InjectModel(Conversation.name) private readonly conversations: Model<ConversationDocument>,
     @InjectModel(Message.name) private readonly messages: Model<MessageDocument>,
     private readonly llm: LlmService,
+    private readonly agentEngine: AgentEngineClient,
   ) {}
 
   async createConversation(dto: CreateConversationDto): Promise<ConversationRecord> {
@@ -45,19 +47,21 @@ export class ChatService {
     return docs.map(toMessageRecord);
   }
 
-  /** Saves the user's message, then — for a `"chat"` conversation — replies via the LLM. A `"agent"` conversation 400s: there's no agent-engine to run one against yet. */
+  /** Saves the user's message, then replies — via the LLM directly for a `"chat"` conversation, or via `agent-engine`'s multi-agent run for an `"agent"` one. */
   async postMessage(conversationId: string, content: string): Promise<MessageRecord> {
     const conversation = await this.conversations.findById(conversationId).lean();
     if (!conversation) {
       throw new NotFoundException(`Unterhaltung "${conversationId}" wurde nicht gefunden.`);
     }
-    if (conversation.mode === 'agent') {
-      throw new BadRequestException('Multi-Agent-Modus ist noch nicht verfügbar — folgt mit agent-engine.');
-    }
 
     await this.messages.create({ conversationId, role: 'user', content });
-    const history = await this.listMessages(conversationId);
-    const reply = await this.llm.complete(history.map((message) => ({ role: message.role, content: message.content })));
+
+    const reply =
+      conversation.mode === 'agent'
+        ? formatAgentRunResult(await this.agentEngine.run(content))
+        : await this.llm.complete(
+            (await this.listMessages(conversationId)).map((message) => ({ role: message.role, content: message.content })),
+          );
 
     const assistantDoc = await this.messages.create({ conversationId, role: 'assistant', content: reply });
     await this.conversations.updateOne({ _id: conversationId }, { $set: { updatedAt: new Date() } });

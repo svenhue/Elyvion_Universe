@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AgentEngineClient } from './agent-engine/agent-engine-client.service';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { LlmService } from './llm/llm.service';
@@ -14,6 +15,6 @@ import { Message, MessageSchema } from './schemas/message.schema';
     ]),
   ],
   controllers: [ChatController],
-  providers: [ChatService, LlmService],
+  providers: [ChatService, LlmService, AgentEngineClient],
 })
 export class ChatModule {}
