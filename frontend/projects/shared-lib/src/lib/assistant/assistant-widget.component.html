@@ -48,7 +48,54 @@
 
       <div class="min-h-0 flex-1 overflow-y-auto p-3">
         @if (activeTab() === 'chat') {
-          <p class="text-xs text-slate-400">Chat folgt in der nächsten Phase.</p>
+          <div class="mb-2 flex items-center justify-between">
+            <select
+              class="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
+              [ngModel]="conversationMode()"
+              (ngModelChange)="setConversationMode($event)"
+            >
+              <option value="chat">Chat</option>
+              <option value="agent">Multi-Agent (bald)</option>
+            </select>
+            <button type="button" class="text-[10px] text-slate-400 hover:text-slate-600" (click)="newConversation()">Neue Unterhaltung</button>
+          </div>
+
+          <div class="mb-2 space-y-2">
+            @for (message of chatMessages(); track message.id) {
+              <div
+                class="rounded-md px-2 py-1.5 text-xs"
+                [class.bg-indigo-50]="message.role === 'user'"
+                [class.bg-slate-50]="message.role === 'assistant'"
+              >
+                <span class="block text-[9px] font-medium uppercase tracking-wide text-slate-400">
+                  {{ message.role === 'user' ? 'Du' : 'Assistent' }}
+                </span>
+                {{ message.content }}
+              </div>
+            } @empty {
+              <p class="text-xs text-slate-400">Noch keine Nachrichten.</p>
+            }
+          </div>
+
+          @if (chatError()) {
+            <p class="mb-2 rounded-md bg-rose-50 p-2 text-[10px] text-rose-700">{{ chatError() }}</p>
+          }
+
+          <div class="flex gap-1">
+            <input
+              class="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+              placeholder="Nachricht…"
+              [ngModel]="chatInput()"
+              (ngModelChange)="chatInput.set($event)"
+              (keydown.enter)="sendChatMessage()"
+            />
+            <button
+              type="button"
+              class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              [disabled]="chatSending()"
+              (click)="sendChatMessage()"
+            >{{ chatSending() ? '…' : 'Senden' }}</button>
+          </div>
         } @else {
           @if (actionsError()) {
             <p class="mb-2 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700">{{ actionsError() }}</p>

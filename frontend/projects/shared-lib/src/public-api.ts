@@ -78,3 +78,6 @@ export * from './lib/actions/actions-api.service';
 export * from './lib/actions/frontend-actions.service';
 
 export * from './lib/assistant/assistant-widget.component';
+
+export * from './lib/chat/chat-schema';
+export * from './lib/chat/chat-api.service';

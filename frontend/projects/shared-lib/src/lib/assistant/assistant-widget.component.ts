@@ -5,6 +5,8 @@ import { firstValueFrom } from 'rxjs';
 import { ActionDescriptor } from '../actions/action-schema';
 import { ActionsApiService } from '../actions/actions-api.service';
 import { FrontendActionsService } from '../actions/frontend-actions.service';
+import { ChatApiService } from '../chat/chat-api.service';
+import { MessageRecord } from '../chat/chat-schema';
 
 type AssistantTab = 'chat' | 'actions';
 
@@ -61,6 +63,7 @@ interface ObjectJsonSchema {
 export class AssistantWidgetComponent implements OnInit {
   private readonly actionsApi = inject(ActionsApiService);
   private readonly frontendActions = inject(FrontendActionsService);
+  private readonly chatApi = inject(ChatApiService);
 
   readonly isOpen = signal(false);
   readonly activeTab = signal<AssistantTab>('actions');
@@ -73,6 +76,13 @@ export class AssistantWidgetComponent implements OnInit {
   readonly formFields = signal<ActionFormField[]>([]);
   readonly running = signal(false);
   readonly runResult = signal<{ success: boolean; output?: unknown; error?: string } | null>(null);
+
+  readonly conversationId = signal<string | null>(null);
+  readonly conversationMode = signal<'chat' | 'agent'>('chat');
+  readonly chatMessages = signal<MessageRecord[]>([]);
+  readonly chatInput = signal('');
+  readonly chatSending = signal(false);
+  readonly chatError = signal('');
 
   private drag: DragState | null = null;
   private resize: ResizeState | null = null;
@@ -141,9 +151,51 @@ export class AssistantWidgetComponent implements OnInit {
           : await firstValueFrom(this.actionsApi.execute(action.key, input));
       this.runResult.set({ success: true, output });
     } catch (error) {
-      this.runResult.set({ success: false, error: errorMessage(error) });
+      this.runResult.set({ success: false, error: errorMessage(error, 'Aktion fehlgeschlagen.') });
     } finally {
       this.running.set(false);
+    }
+  }
+
+  // --- Chat tab ---
+
+  setConversationMode(mode: 'chat' | 'agent'): void {
+    this.conversationMode.set(mode);
+  }
+
+  /** Drops the current conversation so the next message starts a fresh one — e.g. after switching mode. */
+  newConversation(): void {
+    this.conversationId.set(null);
+    this.chatMessages.set([]);
+    this.chatError.set('');
+  }
+
+  private async ensureConversation(): Promise<string> {
+    const existing = this.conversationId();
+    if (existing) return existing;
+    const conversation = await firstValueFrom(this.chatApi.create({ mode: this.conversationMode() }));
+    this.conversationId.set(conversation.id);
+    return conversation.id;
+  }
+
+  async sendChatMessage(): Promise<void> {
+    const content = this.chatInput().trim();
+    if (!content || this.chatSending()) return;
+    this.chatSending.set(true);
+    this.chatError.set('');
+    this.chatInput.set('');
+    try {
+      const id = await this.ensureConversation();
+      this.chatMessages.update((messages) => [
+        ...messages,
+        { id: `pending-${Date.now()}`, conversationId: id, role: 'user', content, createdAt: new Date().toISOString() },
+      ]);
+      const reply = await firstValueFrom(this.chatApi.postMessage(id, content));
+      this.chatMessages.update((messages) => [...messages, reply]);
+    } catch (error) {
+      this.chatError.set(errorMessage(error, 'Nachricht konnte nicht gesendet werden.'));
+    } finally {
+      this.chatSending.set(false);
     }
   }
 
@@ -194,6 +246,7 @@ function coerceField(field: ActionFormField): unknown {
   return field.value;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Aktion fehlgeschlagen.';
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return `${fallback} ${error.message}`;
+  return fallback;
 }
