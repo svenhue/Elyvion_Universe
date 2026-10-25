@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ELYVION_GATEWAY_URL } from '../api/gateway-url.token';
 import {
+  KnowledgeGraphValidationReport,
   Ontology,
   OntologyCreatePayload,
   OntologyEdge,
@@ -71,5 +72,11 @@ export class OntologyApiService {
 
   deleteEdge(key: string, edgeId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/ontologies/${key}/edges/${edgeId}`);
+  }
+
+  /** Checks a knowledge graph's node/edge types against a formal Ontology (default: whatever it declared via `conforms_to`, falling back to `platform-ontology`) — a report, not a write-time gate. */
+  validateGraph(key: string, against?: string): Observable<KnowledgeGraphValidationReport> {
+    const query = against ? `?against=${encodeURIComponent(against)}` : '';
+    return this.http.get<KnowledgeGraphValidationReport>(`${this.base}/ontologies/${key}/validate${query}`);
   }
 }

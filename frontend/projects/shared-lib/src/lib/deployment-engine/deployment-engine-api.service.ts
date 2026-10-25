@@ -19,13 +19,14 @@ export class DeploymentEngineApiService {
       .pipe(map((r) => r.data));
   }
 
-  list() {
-    return this.api.get<Deployment[]>(DeploymentEngineApiService.MODULE, '/deployments').pipe(map((r) => r.data));
+  list(solutionKey?: string) {
+    const query = solutionKey ? `?solutionKey=${encodeURIComponent(solutionKey)}` : '';
+    return this.api.get<Deployment[]>(DeploymentEngineApiService.MODULE, `/deployments${query}`).pipe(map((r) => r.data));
   }
 
-  deploy(name: string, targetId: string) {
+  deploy(name: string, targetId: string, solutionKey?: string) {
     return this.api
-      .post<Deployment>(DeploymentEngineApiService.MODULE, '/deployments', { name, targetId })
+      .post<Deployment>(DeploymentEngineApiService.MODULE, '/deployments', { name, targetId, solutionKey })
       .pipe(map((r) => r.data));
   }
 

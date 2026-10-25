@@ -12,6 +12,10 @@ export class Deployment {
   @Prop({ type: Types.ObjectId, ref: 'DeploymentTarget', required: true })
   targetId!: Types.ObjectId;
 
+  /** The Solution (bundle of apps/workflows/agents) this deployment deploys as a unit, if any — see the `solutions` module. Optional: a deployment can still just be an ad-hoc single build. */
+  @Prop()
+  solutionKey?: string;
+
   @Prop({ enum: DEPLOYMENT_STATUSES, default: 'pending' })
   status!: DeploymentStatus;
 

@@ -6,7 +6,7 @@ import cytoscape from 'cytoscape';
 import edgehandles from 'cytoscape-edgehandles';
 import { firstValueFrom } from 'rxjs';
 import { OntologyApiService } from './ontology-api.service';
-import { Ontology, OntologyAttributeValue } from './ontology-schema';
+import { KnowledgeGraphValidationReport, Ontology, OntologyAttributeValue } from './ontology-schema';
 
 cytoscape.use(edgehandles);
 
@@ -112,6 +112,9 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
   readonly allNodes = signal<{ id: string; name: string }[]>([]);
   readonly newEdgeTargetId = signal('');
   readonly newEdgeType = signal('relates_to');
+
+  readonly validationReport = signal<KnowledgeGraphValidationReport | null>(null);
+  readonly validating = signal(false);
 
   readonly connectableNodes = computed(() => this.allNodes().filter((node) => node.id !== this.selectedNode()?.id));
 
@@ -321,7 +324,26 @@ export class OntologyEngineComponent implements OnInit, AfterViewInit, OnDestroy
     this.selectedOntologyKey.set(key);
     this.selectedNode.set(null);
     this.selectedEdge.set(null);
+    this.validationReport.set(null);
     await this.reloadGraph();
+  }
+
+  /** Checks the selected knowledge graph's node/edge types against the platform Ontology — a report, not a write-time gate (see ontology-engine's README). */
+  async runValidation(): Promise<void> {
+    const key = this.selectedOntologyKey();
+    if (!key || this.validating()) return;
+    this.validating.set(true);
+    try {
+      this.validationReport.set(await firstValueFrom(this.ontologyApi.validateGraph(key)));
+    } catch (error) {
+      this.loadError.set(errorMessage(error, 'Validierung fehlgeschlagen.'));
+    } finally {
+      this.validating.set(false);
+    }
+  }
+
+  closeValidation(): void {
+    this.validationReport.set(null);
   }
 
   private async reloadGraph(): Promise<void> {

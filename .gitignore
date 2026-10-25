@@ -37,3 +37,6 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# ./scripts/dev-up.sh runtime state (PIDs, per-service logs)
+.dev-run/

@@ -1,0 +1,121 @@
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
+    <div class="mb-3 flex h-8 shrink-0 items-center gap-2">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Logik</h1>
+    </div>
+
+    @if (loadError()) {
+      <p class="mb-2 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700">{{ loadError() }}</p>
+    }
+
+    <div class="mb-3 space-y-1">
+      @for (rule of rules(); track rule._id) {
+        <button
+          type="button"
+          (click)="select(rule.key)"
+          class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition"
+          [class.bg-indigo-100]="selectedKey() === rule.key"
+          [class.hover:bg-slate-100]="selectedKey() !== rule.key"
+        >
+          <span>{{ rule.name }}</span>
+          <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] text-slate-500">{{ rule.blocks.length }}</span>
+        </button>
+      } @empty {
+        <p class="px-2.5 py-1.5 text-xs text-slate-400">Noch keine Regeln angelegt.</p>
+      }
+    </div>
+
+    <form class="space-y-2 border-t border-slate-200 pt-3 text-xs" (ngSubmit)="createRule()">
+      <p class="font-medium text-slate-700">Neue Regel</p>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Key (z. B. einkaufsrichtlinie)"
+        [ngModel]="newKey()"
+        (ngModelChange)="newKey.set($event)"
+        name="newKey"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Name"
+        [ngModel]="newName()"
+        (ngModelChange)="newName.set($event)"
+        name="newName"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Beschreibung (optional)"
+        [ngModel]="newDescription()"
+        (ngModelChange)="newDescription.set($event)"
+        name="newDescription"
+      />
+      <button type="submit" class="w-full rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white" [disabled]="creating()">
+        {{ creating() ? 'Lege an…' : 'Regel anlegen' }}
+      </button>
+    </form>
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6">
+    @if (selectedRule(); as rule) {
+      <div class="mb-4 flex items-start justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">{{ rule.name }}</h2>
+          <p class="text-xs text-slate-500">{{ rule.key }} — {{ rule.description || 'Keine Beschreibung.' }}</p>
+        </div>
+        <button type="button" class="rounded-md bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700" (click)="removeRule(rule.key)">
+          Löschen
+        </button>
+      </div>
+
+      <section class="mb-6">
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-sm font-medium text-slate-700">Logikblöcke (Pipeline)</h3>
+          <div class="flex gap-1">
+            @for (type of blockTypes; track type) {
+              <button type="button" class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50" (click)="addBlock(type)">
+                + {{ type }}
+              </button>
+            }
+          </div>
+        </div>
+        <textarea
+          class="h-56 w-full rounded-md border border-slate-200 p-2 font-mono text-[11px] outline-none focus:border-indigo-400"
+          [ngModel]="blocksJson()"
+          (ngModelChange)="blocksJson.set($event)"
+        ></textarea>
+        @if (blocksError()) {
+          <p class="mt-1 text-xs text-rose-600">{{ blocksError() }}</p>
+        }
+        <button type="button" class="mt-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white" [disabled]="savingBlocks()" (click)="saveBlocks()">
+          {{ savingBlocks() ? 'Speichere…' : 'Blöcke speichern' }}
+        </button>
+      </section>
+
+      <section>
+        <h3 class="mb-2 text-sm font-medium text-slate-700">Testlauf</h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <p class="mb-1 text-[10px] uppercase tracking-wider text-slate-400">Input</p>
+            <textarea
+              class="h-40 w-full rounded-md border border-slate-200 p-2 font-mono text-[11px] outline-none focus:border-indigo-400"
+              [ngModel]="testInputJson()"
+              (ngModelChange)="testInputJson.set($event)"
+            ></textarea>
+          </div>
+          <div>
+            <p class="mb-1 text-[10px] uppercase tracking-wider text-slate-400">Output</p>
+            <pre class="h-40 w-full overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-[11px]">{{ testResult() ?? '—' }}</pre>
+          </div>
+        </div>
+        @if (testError()) {
+          <p class="mt-1 text-xs text-rose-600">{{ testError() }}</p>
+        }
+        <button type="button" class="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white" [disabled]="running()" (click)="runTest()">
+          {{ running() ? 'Läuft…' : 'Ausführen' }}
+        </button>
+      </section>
+    } @else {
+      <p class="text-sm text-slate-400">Regel aus der Liste wählen oder eine neue anlegen.</p>
+    }
+  </div>
+</main>

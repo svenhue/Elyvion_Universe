@@ -119,3 +119,17 @@ export * from './lib/deployment-engine/deployment-engine-schema';
 export * from './lib/deployment-engine/deployment-engine-api.service';
 export * from './lib/deployment-engine/deployment-engine.component';
 export * from './lib/deployment-engine/deployment-engine.nav';
+
+export * from './lib/solutions/solutions-schema';
+export * from './lib/solutions/solutions-api.service';
+export * from './lib/solutions/solutions.component';
+export * from './lib/solutions/solutions.nav';
+
+export * from './lib/rules-engine/rules-engine-schema';
+export * from './lib/rules-engine/rules-engine-api.service';
+export * from './lib/rules-engine/rules-engine.component';
+export * from './lib/rules-engine/rules-engine.nav';
+
+export * from './lib/repository/repository-schema';
+export * from './lib/repository/repository.component';
+export * from './lib/repository/repository.nav';

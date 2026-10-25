@@ -170,6 +170,14 @@ export class WorkflowRunnerService {
         }
         return firstValueFrom(this.actionsApi.execute(step.actionKey, input));
       }
+
+      case 'rule':
+      case 'agent':
+      case 'start-event':
+      case 'end-event':
+      case 'exclusive-gateway':
+        // Backend-only (see `WorkflowStepType`'s doc comment) — same reasoning as `call-service`.
+        throw new Error(`"${step.type}" step "${step.id}" can't run client-side — it's a backend-target-only step kind.`);
     }
   }
 }

@@ -18,6 +18,16 @@
  *   how a frontend workflow hands off to a backend one.
  * - `call-service`: backend-only — an inter-module call via the
  *   Registry; not reachable the same way from a browser.
+ * - `rule`, `agent`: backend-only, same as `call-service` — `rule` runs
+ *   a `rules-engine` business rule by key; `agent` is the n8n-style "AI
+ *   Agent node" pattern, starting an `agent-engine` run and polling it
+ *   to completion so the next step gets the agent's actual answer. Both
+ *   could become shared later (a browser can call the Gateway too) but
+ *   only the backend processor implements them right now.
+ * - `start-event`, `end-event`, `exclusive-gateway`: backend-only,
+ *   BPMN-lite. The two events are pure markers (no runtime behavior);
+ *   the gateway runs a rule and branches on its output — BPMN's XOR
+ *   gateway.
  *
  * `control-component` / `trigger-event` (the event-handler system's other
  * action kinds, see `EventAction`) aren't available as workflow steps yet
@@ -34,7 +44,12 @@ export type WorkflowStepType =
   | 'condition'
   | 'delay'
   | 'parallel'
-  | 'action';
+  | 'action'
+  | 'rule'
+  | 'agent'
+  | 'start-event'
+  | 'end-event'
+  | 'exclusive-gateway';
 
 export interface WorkflowStepBase {
   id: string;
@@ -114,6 +129,48 @@ export interface WorkflowActionStep extends WorkflowStepBase {
   input?: unknown;
 }
 
+export interface WorkflowRuleStep extends WorkflowStepBase {
+  type: 'rule';
+  /** A key from `rules-engine`'s `GET /rules`. */
+  ruleKey: string;
+  input?: unknown;
+}
+
+/**
+ * An agent, embedded directly as a workflow node — the n8n "AI Agent
+ * node" pattern: give it a task, `agent-engine` designs and runs a team
+ * against it, and the final answer becomes this step's output.
+ */
+export interface WorkflowAgentStep extends WorkflowStepBase {
+  type: 'agent';
+  /** Literal task text, or a `"$context...."` path, resolved against this run's context before the call. */
+  task: unknown;
+  /** How long to wait before failing this step (default 120s). */
+  timeoutSeconds?: number;
+}
+
+export interface WorkflowStartEventStep extends WorkflowStepBase {
+  type: 'start-event';
+}
+
+export interface WorkflowEndEventStep extends WorkflowStepBase {
+  type: 'end-event';
+}
+
+export interface WorkflowExclusiveGatewayCase {
+  /** Compared against the rule's output, stringified — the first matching case's `next` wins. */
+  value: string;
+  next: string[];
+}
+
+/** BPMN's XOR gateway — runs a rule and branches on its output. `next` (inherited) is the fallback when no case matches. */
+export interface WorkflowExclusiveGatewayStep extends WorkflowStepBase {
+  type: 'exclusive-gateway';
+  ruleKey: string;
+  input?: unknown;
+  cases: WorkflowExclusiveGatewayCase[];
+}
+
 export type WorkflowStep =
   | WorkflowSetVariableStep
   | WorkflowRunScriptStep
@@ -123,7 +180,12 @@ export type WorkflowStep =
   | WorkflowConditionStep
   | WorkflowDelayStep
   | WorkflowParallelStep
-  | WorkflowActionStep;
+  | WorkflowActionStep
+  | WorkflowRuleStep
+  | WorkflowAgentStep
+  | WorkflowStartEventStep
+  | WorkflowEndEventStep
+  | WorkflowExclusiveGatewayStep;
 
 export interface WorkflowDefinition {
   key: string;

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from neo4j import AsyncSession
 
 from ..db import get_session
 from . import repository
 from .schemas import (
+    KnowledgeGraphValidationReport,
     Ontology,
     OntologyCreate,
     OntologyEdge,
@@ -14,6 +15,7 @@ from .schemas import (
     OntologyNodeCreate,
     OntologyNodeUpdate,
 )
+from .seed import PLATFORM_ONTOLOGY_KEY
 
 router = APIRouter(prefix="/ontologies", tags=["ontologies"])
 
@@ -44,6 +46,18 @@ async def delete_ontology(key: str, session: AsyncSession = Session) -> None:
 async def get_graph(key: str, session: AsyncSession = Session) -> OntologyGraph:
     nodes, edges = await repository.get_graph(session, key)
     return OntologyGraph(nodes=nodes, edges=edges)
+
+
+@router.get("/{key}/validate")
+async def validate_knowledge_graph(
+    key: str, against: str | None = Query(default=None), session: AsyncSession = Session
+) -> KnowledgeGraphValidationReport:
+    """Validates a knowledge graph's node/relationship types against a (formal) Ontology — defaults to whatever it declared via `conforms_to`, falling back to the seeded platform Ontology."""
+    ontology_key = against
+    if ontology_key is None:
+        knowledge_graph = await repository.get_ontology(session, key)
+        ontology_key = knowledge_graph.conforms_to or PLATFORM_ONTOLOGY_KEY
+    return await repository.validate_knowledge_graph(session, key, ontology_key)
 
 
 @router.post("/{key}/nodes")

@@ -39,6 +39,27 @@ const workflowStepSchema = z.discriminatedUnion('type', [
   // runner resolves it locally first (FrontendActionsService) and only
   // falls back to HTTP for a backend-target action key.
   z.object({ ...stepBase, type: z.literal('action'), actionKey: z.string().min(1), input: z.unknown().optional() }),
+  // Runs a `rules-engine` business rule by key.
+  z.object({ ...stepBase, type: z.literal('rule'), ruleKey: z.string().min(1), input: z.unknown().optional() }),
+  // The n8n-style "AI Agent node": starts an `agent-engine` run and polls
+  // it to completion — see `WorkflowProcessor.runAgentStep`.
+  z.object({
+    ...stepBase,
+    type: z.literal('agent'),
+    task: z.unknown(),
+    timeoutSeconds: z.number().int().positive().optional(),
+  }),
+  // BPMN-lite start/end events — pure markers, no payload.
+  z.object({ ...stepBase, type: z.literal('start-event') }),
+  z.object({ ...stepBase, type: z.literal('end-event') }),
+  // BPMN's XOR gateway: runs a rule, branches on its output.
+  z.object({
+    ...stepBase,
+    type: z.literal('exclusive-gateway'),
+    ruleKey: z.string().min(1),
+    input: z.unknown().optional(),
+    cases: z.array(z.object({ value: z.string().min(1), next: z.array(z.string()).min(1) })).min(1),
+  }),
   // Frontend-only step kinds (see the frontend's `workflow-schema.ts`) —
   // the backend only ever *stores* these, for a `target: "frontend"`
   // workflow; its own processor never executes them (see its step

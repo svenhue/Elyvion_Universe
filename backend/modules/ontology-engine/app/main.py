@@ -18,6 +18,7 @@ from .db import connect, disconnect, session_scope
 from .environment import service as environment_service
 from .environment.router import router as environment_router
 from .ontologies.router import router as ontologies_router
+from .ontologies.seed import seed_platform_ontology
 
 configure_logging(settings.module_name, settings.environment)
 logger = get_logger(__name__)
@@ -39,6 +40,8 @@ async def _tick_environment_sync() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect()
+    async with session_scope() as session:
+        await seed_platform_ontology(session)
     scheduler.add_job(_tick_environment_sync, "interval", seconds=30, id="environment-sync")
     scheduler.start()
     await register_module(
@@ -53,16 +56,20 @@ async def lifespan(app: FastAPI):
         )
     )
 
-    # Exposes ontologies as actions — specifically so an agent can look up
-    # existing "angular_app_config" ontologies as reference examples of
-    # how an Elyvion application is structured before building/editing one
-    # itself (app-config's add_element/update_element actions).
+    # Exposes knowledge graphs as actions — specifically so an agent can
+    # look up existing "angular_app_config" knowledge graphs as reference
+    # examples of how an Elyvion application is structured before
+    # building/editing one itself (app-config's add_element/update_element
+    # actions). "Ontologie" in these keys/paths is this module's reserved
+    # term for the formal schema (see ontologies/seed.py) — everything
+    # these actions list/create/edit is a knowledge graph, instance data
+    # that conforms to it.
     await register_remote_action(
         RegisterRemoteActionOptions(
             actions_engine_url=settings.actions_engine_url,
             key="list_app_ontologies",
-            name="App-Ontologien auflisten",
-            description="Listet alle gespeicherten Ontologien (inkl. ihres type-Felds, z. B. angular_app_config) als Referenzbeispiele für Anwendungsstrukturen.",
+            name="Wissensgraphen auflisten",
+            description="Listet alle gespeicherten Wissensgraphen (inkl. ihres type-Felds, z. B. angular_app_config) als Referenzbeispiele für Anwendungsstrukturen.",
             category="ontology-engine",
             module_name=settings.module_name,
             path="/ontologies",
@@ -74,8 +81,8 @@ async def lifespan(app: FastAPI):
         RegisterRemoteActionOptions(
             actions_engine_url=settings.actions_engine_url,
             key="get_ontology_graph",
-            name="Ontologie-Graph lesen",
-            description="Liest den vollständigen Graphen (Nodes + Kanten) einer Ontologie anhand ihres Keys.",
+            name="Wissensgraph lesen",
+            description="Liest den vollständigen Graphen (Nodes + Kanten) eines Wissensgraphen anhand seines Keys.",
             category="ontology-engine",
             module_name=settings.module_name,
             path="/ontologies/{key}/graph",
@@ -88,14 +95,14 @@ async def lifespan(app: FastAPI):
         )
     )
 
-    # Write actions — what an agent whose job is building ontologies
+    # Write actions — what an agent whose job is building knowledge graphs
     # (not just reading them for reference) actually needs.
     await register_remote_action(
         RegisterRemoteActionOptions(
             actions_engine_url=settings.actions_engine_url,
             key="create_ontology",
-            name="Ontologie anlegen",
-            description="Legt eine neue, leere Ontologie an (key, name, optional type).",
+            name="Wissensgraph anlegen",
+            description="Legt einen neuen, leeren Wissensgraph an (key, name, optional type, optional conforms_to — der Key der Ontologie, gegen die er validiert werden kann).",
             category="ontology-engine",
             module_name=settings.module_name,
             path="/ontologies",
@@ -107,6 +114,7 @@ async def lifespan(app: FastAPI):
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "type": {"type": "string", "description": "z. B. angular_app_config, elyvion_platform_environment, custom."},
+                    "conforms_to": {"type": "string", "description": "Key der Ontologie (Standard: platform-ontology)."},
                 },
                 "required": ["key", "name"],
             },
@@ -116,8 +124,8 @@ async def lifespan(app: FastAPI):
         RegisterRemoteActionOptions(
             actions_engine_url=settings.actions_engine_url,
             key="add_ontology_node",
-            name="Ontologie-Node hinzufügen",
-            description="Fügt einer Ontologie einen neuen Node hinzu (type, name, attributes — nur Skalare, keine verschachtelten Objekte).",
+            name="Wissensgraph-Node hinzufügen",
+            description="Fügt einem Wissensgraphen einen neuen Node hinzu (type, name, attributes — nur Skalare, keine verschachtelten Objekte).",
             category="ontology-engine",
             module_name=settings.module_name,
             path="/ontologies/{key}/nodes",
@@ -125,7 +133,7 @@ async def lifespan(app: FastAPI):
             input_schema={
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Key der Ziel-Ontologie."},
+                    "key": {"type": "string", "description": "Key des Ziel-Wissensgraphen."},
                     "type": {"type": "string"},
                     "name": {"type": "string"},
                     "attributes": {"type": "object", "description": "Nur Skalare (string/number/boolean) als Werte."},
@@ -139,8 +147,8 @@ async def lifespan(app: FastAPI):
         RegisterRemoteActionOptions(
             actions_engine_url=settings.actions_engine_url,
             key="add_ontology_edge",
-            name="Ontologie-Kante hinzufügen",
-            description="Verbindet zwei bestehende Nodes einer Ontologie mit einer gerichteten, typisierten Kante.",
+            name="Wissensgraph-Kante hinzufügen",
+            description="Verbindet zwei bestehende Nodes eines Wissensgraphen mit einer gerichteten, typisierten Kante.",
             category="ontology-engine",
             module_name=settings.module_name,
             path="/ontologies/{key}/edges",
@@ -148,13 +156,33 @@ async def lifespan(app: FastAPI):
             input_schema={
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Key der Ziel-Ontologie."},
+                    "key": {"type": "string", "description": "Key des Ziel-Wissensgraphen."},
                     "source_id": {"type": "string"},
                     "target_id": {"type": "string"},
                     "type": {"type": "string"},
                     "attributes": {"type": "object"},
                 },
                 "required": ["key", "source_id", "target_id", "type"],
+            },
+        )
+    )
+    await register_remote_action(
+        RegisterRemoteActionOptions(
+            actions_engine_url=settings.actions_engine_url,
+            key="validate_knowledge_graph",
+            name="Wissensgraph validieren",
+            description="Prüft, ob ein Wissensgraph nur Node-/Kanten-Typen verwendet, die in der (Standard: platform-ontology) Ontologie als Klasse bzw. Beziehungstyp definiert sind — ein Bericht, kein Schreibschutz.",
+            category="ontology-engine",
+            module_name=settings.module_name,
+            path="/ontologies/{key}/validate",
+            method="GET",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                    "against": {"type": "string", "description": "Optional — Key einer anderen Ontologie als Vergleich."},
+                },
+                "required": ["key"],
             },
         )
     )

@@ -13,6 +13,9 @@ import {
   NavigationRegistryService,
   ONTOLOGY_ENGINE_NAV_ITEM,
   PRO_CODE_NAV_ITEM,
+  REPOSITORY_NAV_ITEM,
+  RULES_ENGINE_NAV_ITEM,
+  SOLUTIONS_NAV_ITEM,
   TELEMETRY_NAV_ITEM,
   WORKFLOW_NAV_ITEM,
 } from '@elyvion/shared-lib';
@@ -49,6 +52,7 @@ export class AppShellComponent {
     inject(FrontendActionsService).registerBuiltins();
     this.navigation.registerAll([
       { name: 'Home', url: '/' },
+      REPOSITORY_NAV_ITEM,
       PRO_CODE_NAV_ITEM,
       WORKFLOW_NAV_ITEM,
       ONTOLOGY_ENGINE_NAV_ITEM,
@@ -59,6 +63,8 @@ export class AppShellComponent {
       DATA_ADAPTERS_NAV_ITEM,
       TELEMETRY_NAV_ITEM,
       DEPLOYMENT_ENGINE_NAV_ITEM,
+      SOLUTIONS_NAV_ITEM,
+      RULES_ENGINE_NAV_ITEM,
     ]);
   }
 

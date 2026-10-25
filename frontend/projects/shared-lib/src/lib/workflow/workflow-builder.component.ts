@@ -8,7 +8,7 @@ import { ActionsApiService } from '../actions/actions-api.service';
 import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.directive';
 import { WorkflowApiService, WorkflowDefinitionRecord, toRunState } from './workflow-api.service';
 import { WorkflowRunnerService } from './workflow-runner.service';
-import { WorkflowRunState, WorkflowStep, WorkflowStepType } from './workflow-schema';
+import { WorkflowExclusiveGatewayCase, WorkflowRunState, WorkflowStep, WorkflowStepType } from './workflow-schema';
 
 /** The fields a step can send a connection out from — each maps to one of its array-valued fields. */
 type PortKey = 'next' | 'onError' | 'whenTrue' | 'branches';
@@ -49,6 +49,11 @@ interface StepDraft {
   branches: string;
   actionKey: string;
   input: string;
+  ruleKey: string;
+  task: string;
+  timeoutSeconds: string;
+  /** `exclusive-gateway` only — a JSON array of `{ value, next: string[] }`, edited as text like Data-Adapters' connectionConfig rather than a bespoke per-case form. */
+  gatewayCasesJson: string;
 }
 
 function blankDraft(id: string, type: WorkflowStepType = 'set-variable', x = 40, y = 40): StepDraft {
@@ -77,6 +82,10 @@ function blankDraft(id: string, type: WorkflowStepType = 'set-variable', x = 40,
     branches: '',
     actionKey: '',
     input: '',
+    ruleKey: '',
+    task: '',
+    timeoutSeconds: '120',
+    gatewayCasesJson: '[]',
   };
 }
 
@@ -128,6 +137,22 @@ function draftFromStep(step: WorkflowStep, index: number): StepDraft {
       draft.actionKey = step.actionKey;
       draft.input = step.input !== undefined ? stringify(step.input) : '';
       break;
+    case 'rule':
+      draft.ruleKey = step.ruleKey;
+      draft.input = step.input !== undefined ? stringify(step.input) : '';
+      break;
+    case 'agent':
+      draft.task = stringify(step.task);
+      draft.timeoutSeconds = String(step.timeoutSeconds ?? 120);
+      break;
+    case 'exclusive-gateway':
+      draft.ruleKey = step.ruleKey;
+      draft.input = step.input !== undefined ? stringify(step.input) : '';
+      draft.gatewayCasesJson = JSON.stringify(step.cases, null, 2);
+      break;
+    case 'start-event':
+    case 'end-event':
+      break;
   }
   return draft;
 }
@@ -170,11 +195,16 @@ const FRONTEND_STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
 ];
 
 const BACKEND_STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
+  { value: 'start-event', label: 'Start-Ereignis' },
+  { value: 'end-event', label: 'End-Ereignis' },
   { value: 'set-variable', label: 'Set Variable' },
   { value: 'http-request', label: 'HTTP Request' },
   { value: 'call-service', label: 'Call Service' },
   { value: 'action', label: 'Action' },
+  { value: 'rule', label: 'Regel' },
+  { value: 'agent', label: 'AI Agent' },
   { value: 'condition', label: 'Condition' },
+  { value: 'exclusive-gateway', label: 'XOR-Gateway' },
   { value: 'delay', label: 'Delay' },
   { value: 'parallel', label: 'Parallel' },
 ];
@@ -198,10 +228,27 @@ const PARALLEL_PORTS: PortDef[] = [
   { key: 'branches', label: 'Branch', colorVar: '#4f46e5' },
   { key: 'onError', label: 'Error', colorVar: '#e11d48' },
 ];
+/** A start event only ever has one way out, and nothing before it can fail — no error port. */
+const START_EVENT_PORTS: PortDef[] = [{ key: 'next', label: 'Start', colorVar: '#16a34a' }];
+/**
+ * The gateway's per-case branches (`cases[].next`) aren't wired as
+ * draggable canvas ports — a rule's possible output values aren't known
+ * up front the way a fixed set of ports would need, so they're edited
+ * as the JSON list in the properties panel instead (same pattern as
+ * rules-engine's own block pipeline editor). `next` here is only the
+ * fallback when no case matches.
+ */
+const GATEWAY_PORTS: PortDef[] = [
+  { key: 'next', label: 'Sonst (kein Case trifft zu)', colorVar: '#64748b' },
+  { key: 'onError', label: 'Error', colorVar: '#e11d48' },
+];
 
 function portsFor(type: WorkflowStepType): PortDef[] {
   if (type === 'condition') return CONDITION_PORTS;
   if (type === 'parallel') return PARALLEL_PORTS;
+  if (type === 'start-event') return START_EVENT_PORTS;
+  if (type === 'end-event') return []; // terminal — nothing can come after it
+  if (type === 'exclusive-gateway') return GATEWAY_PORTS;
   return DEFAULT_PORTS;
 }
 
@@ -416,6 +463,16 @@ export class WorkflowBuilderComponent implements OnInit {
         return `${idList(step.branches).length} Branches`;
       case 'action':
         return step.actionKey || '…';
+      case 'rule':
+        return `Regel: ${step.ruleKey || '…'}`;
+      case 'agent':
+        return `Agent: ${(step.task || '…').slice(0, 24)}`;
+      case 'start-event':
+        return 'Start';
+      case 'end-event':
+        return 'Ende';
+      case 'exclusive-gateway':
+        return `XOR: ${step.ruleKey || '…'}`;
     }
   }
 
@@ -637,13 +694,58 @@ export class WorkflowBuilderComponent implements OnInit {
           actionKey: draft.actionKey.trim(),
           input: draft.input.trim() ? coerce(draft.input) : undefined,
         };
+      case 'rule':
+        if (!draft.ruleKey.trim()) throw new Error(`Step "${draft.id}": Regel fehlt.`);
+        return {
+          ...base,
+          type: 'rule',
+          ruleKey: draft.ruleKey.trim(),
+          input: draft.input.trim() ? coerce(draft.input) : undefined,
+        };
+      case 'agent':
+        if (!draft.task.trim()) throw new Error(`Step "${draft.id}": Task fehlt.`);
+        return {
+          ...base,
+          type: 'agent',
+          task: coerce(draft.task),
+          timeoutSeconds: Number(draft.timeoutSeconds) || 120,
+        };
+      case 'start-event':
+        return { ...base, type: 'start-event' };
+      case 'end-event':
+        return { ...base, type: 'end-event' };
+      case 'exclusive-gateway': {
+        if (!draft.ruleKey.trim()) throw new Error(`Step "${draft.id}": Regel fehlt.`);
+        let cases: WorkflowExclusiveGatewayCase[];
+        try {
+          cases = JSON.parse(draft.gatewayCasesJson || '[]');
+        } catch {
+          throw new Error(`Step "${draft.id}": Cases-JSON ist ungültig.`);
+        }
+        if (!cases.length) throw new Error(`Step "${draft.id}": mindestens ein Case ist erforderlich.`);
+        return {
+          ...base,
+          type: 'exclusive-gateway',
+          ruleKey: draft.ruleKey.trim(),
+          input: draft.input.trim() ? coerce(draft.input) : undefined,
+          cases,
+        };
+      }
     }
   }
 }
 
+/**
+ * Must match the ports' actual CSS layout exactly, or the edge lines
+ * drawn from this point land visibly off the colored dots — the ports
+ * are laid out with `justify-around` over `count` items, which centers
+ * each one in its own `NODE_WIDTH / count` slice (`(index + 0.5)`), not
+ * `NODE_WIDTH / (count + 1)` per item (a different, incompatible
+ * distribution that was the actual bug here).
+ */
 function portPoint(step: StepDraft, index: number, count: number): Point {
-  const spacing = NODE_WIDTH / (count + 1);
-  return { x: step.x + spacing * (index + 1), y: step.y + NODE_HEIGHT };
+  const slice = NODE_WIDTH / count;
+  return { x: step.x + slice * (index + 0.5), y: step.y + NODE_HEIGHT };
 }
 
 function pointInNode(x: number, y: number, step: StepDraft): boolean {

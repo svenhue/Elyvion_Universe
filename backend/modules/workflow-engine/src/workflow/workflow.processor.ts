@@ -4,7 +4,7 @@ import { Job, Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { readPath, resolveTemplate } from './resolve-template';
 import { WORKFLOW_QUEUE, WorkflowJobData } from './workflow.constants';
-import { WorkflowDefinitionBody, WorkflowStep } from './workflow-schema';
+import { AgentStep, WorkflowDefinitionBody, WorkflowStep } from './workflow-schema';
 
 /**
  * Executes one workflow step per job — the unit BullMQ retries/backs off
@@ -120,6 +120,13 @@ export class WorkflowProcessor extends WorkerHost {
     if (step.type === 'parallel') {
       return step.branches;
     }
+    if (step.type === 'exclusive-gateway') {
+      // The gateway's own just-recorded output (see executeStep's 'exclusive-gateway'
+      // case) — stringified, since a rule's output and a case's `value` are both free-form.
+      const output = (context['steps'] as Record<string, unknown> | undefined)?.[step.id];
+      const match = step.cases.find((c) => c.value === String(output));
+      return match ? match.next : (step.next ?? []);
+    }
     return step.next ?? [];
   }
 
@@ -178,7 +185,67 @@ export class WorkflowProcessor extends WorkerHost {
         }
         return (parsed as { data?: unknown })?.data ?? parsed;
       }
+
+      case 'rule':
+        return this.runRuleByKey(step.ruleKey, step.input, context);
+
+      case 'agent':
+        return this.runAgentStep(step, context);
+
+      case 'start-event':
+      case 'end-event':
+        // Pure BPMN markers — no runtime behavior of their own (see workflow-schema.ts).
+        return undefined;
+
+      case 'exclusive-gateway':
+        return this.runRuleByKey(step.ruleKey, step.input, context);
     }
+  }
+
+  /** Shared by the `rule` step and the `exclusive-gateway`'s rule-based branch selection — both just run a `rules-engine` rule and hand back its output. */
+  private async runRuleByKey(ruleKey: string, input: unknown, context: Record<string, unknown>): Promise<unknown> {
+    const moduleInfo = await this.lookupModule('rules-engine');
+    const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
+    const url = `${moduleInfo.baseUrl}${prefix}/rules/${ruleKey}/execute`;
+    const resolvedInput = input ? resolveTemplate(input, context) : {};
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ input: resolvedInput }),
+    });
+    const parsed = await safeJson(response);
+    if (!response.ok) {
+      throw new Error(`Regel "${ruleKey}" fehlgeschlagen: ${JSON.stringify(parsed)}`);
+    }
+    return (parsed as { data?: { output?: unknown } })?.data?.output;
+  }
+
+  /** The n8n-style "AI Agent node" — starts an `agent-engine` run and polls it to completion (bounded by `step.timeoutSeconds`), since the step after this one typically needs the agent's actual answer, not just a run id. */
+  private async runAgentStep(step: AgentStep, context: Record<string, unknown>): Promise<unknown> {
+    const moduleInfo = await this.lookupModule('agent-engine');
+    const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
+    const task = resolveTemplate(step.task, context);
+
+    const createResponse = await fetch(`${moduleInfo.baseUrl}${prefix}/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ task }),
+    });
+    const created = (await safeJson(createResponse)) as { id?: string } | null;
+    if (!createResponse.ok || !created?.id) {
+      throw new Error(`Agent-Run konnte nicht gestartet werden: ${JSON.stringify(created)}`);
+    }
+
+    const timeoutMs = (step.timeoutSeconds ?? 120) * 1000;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const pollResponse = await fetch(`${moduleInfo.baseUrl}${prefix}/runs/${created.id}`);
+      const run = (await safeJson(pollResponse)) as { status?: string; final_answer?: string; error?: string } | null;
+      if (run?.status === 'succeeded') return run.final_answer;
+      if (run?.status === 'failed') throw new Error(`Agent-Run fehlgeschlagen: ${run.error}`);
+    }
+    throw new Error(`Agent-Run "${created.id}" hat das Zeitlimit von ${step.timeoutSeconds ?? 120}s überschritten.`);
   }
 
   private async lookupModule(name: string): Promise<{ baseUrl: string; routePrefix: string }> {

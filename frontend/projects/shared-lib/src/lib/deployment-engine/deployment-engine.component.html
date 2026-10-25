@@ -1,7 +1,7 @@
 <main class="h-full w-full overflow-y-auto bg-white p-6 font-sans text-slate-900">
   <div class="mb-4 flex items-center gap-2">
     <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
-    <h1 class="text-lg font-semibold">Deployments</h1>
+    <h1 class="text-lg font-semibold">Umgebung</h1>
   </div>
 
   @if (loadError()) {
@@ -10,7 +10,7 @@
 
   <section class="mb-8 grid grid-cols-2 gap-6">
     <div>
-      <h2 class="mb-2 text-sm font-medium text-slate-700">Deployment-Ziele</h2>
+      <h2 class="mb-2 text-sm font-medium text-slate-700">Umgebungen</h2>
       <ul class="mb-3 space-y-1 text-sm">
         @for (target of targets(); track target._id) {
           <li class="flex items-center justify-between rounded-md bg-slate-50 px-2.5 py-1.5">
@@ -18,10 +18,10 @@
             <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">{{ target.type }}</span>
           </li>
         } @empty {
-          <li class="text-xs text-slate-400">Noch keine Ziele angelegt.</li>
+          <li class="text-xs text-slate-400">Noch keine Umgebungen angelegt.</li>
         }
       </ul>
-      <form class="flex gap-2" (submit.prevent)="createTarget()">
+      <form class="flex gap-2" (ngSubmit)="createTarget()">
         <input
           class="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-xs"
           placeholder="Name (z. B. local)"
@@ -47,7 +47,7 @@
 
     <div>
       <h2 class="mb-2 text-sm font-medium text-slate-700">Neues Deployment</h2>
-      <form class="space-y-2" (submit.prevent)="deploy()">
+      <form class="space-y-2" (ngSubmit)="deploy()">
         <input
           class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs"
           placeholder="Deployment-Name"
@@ -65,6 +65,13 @@
             <option [value]="target._id">{{ target.name }}</option>
           }
         </select>
+        <input
+          class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+          placeholder="Solution-Key (optional, siehe Lösungen)"
+          [ngModel]="newDeploymentSolutionKey()"
+          (ngModelChange)="newDeploymentSolutionKey.set($event)"
+          name="newDeploymentSolutionKey"
+        />
         @if (deployError()) {
           <p class="text-xs text-rose-600">{{ deployError() }}</p>
         }
@@ -81,6 +88,7 @@
       <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
         <th class="py-2">Name</th>
         <th class="py-2">Ziel</th>
+        <th class="py-2">Solution</th>
         <th class="py-2">Status</th>
         <th class="py-2">URL</th>
         <th class="py-2"></th>
@@ -91,6 +99,7 @@
         <tr class="border-b border-slate-100">
           <td class="py-2 font-medium">{{ deployment.name }}</td>
           <td class="py-2 text-slate-500">{{ targetName(deployment.targetId) }}</td>
+          <td class="py-2 text-slate-500">{{ deployment.solutionKey ?? '—' }}</td>
           <td class="py-2">
             <span
               class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase"

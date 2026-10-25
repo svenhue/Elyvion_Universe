@@ -33,7 +33,8 @@ export class ApiClientService {
     return this.http.put<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`, body);
   }
 
-  delete(moduleName: string, path: string) {
-    return this.http.delete<void>(`${this.gatewayUrl}/api/${moduleName}${path}`);
+  /** Most DELETEs return nothing; a few (e.g. "remove this member and give me the updated parent back") return the envelope like any other verb — `delete<Solution>(...)` opts into that instead of `void`. */
+  delete<T = void>(moduleName: string, path: string) {
+    return this.http.delete<T extends void ? void : ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`);
   }
 }

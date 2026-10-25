@@ -15,6 +15,8 @@ export interface Deployment {
   _id: string;
   name: string;
   targetId: string;
+  /** The Solution (see `solutions` module) this deployment deploys, if any. */
+  solutionKey?: string;
   status: DeploymentStatus;
   handle?: string;
   port?: number;

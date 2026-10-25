@@ -145,25 +145,66 @@
           }
         </svg>
 
+        <!--
+          BPMN-ish shape per step type, within the same fixed NODE_WIDTH x
+          NODE_HEIGHT bounding box every step already uses for port/drag/
+          drop-target geometry (portPoint, pointInNode, …) — only what
+          renders INSIDE that box changes, so none of that math needed to
+          change to tell a gateway from an event from a task at a glance.
+        -->
         @for (step of steps(); track step.id) {
           <div
-            class="absolute cursor-move rounded-xl border bg-white p-2.5 shadow-sm select-none"
+            class="absolute cursor-move select-none"
             [style.left.px]="step.x"
             [style.top.px]="step.y"
             [style.width.px]="nodeWidth"
-            [class.border-indigo-500]="selectedStepId() === step.id"
-            [class.ring-2]="selectedStepId() === step.id"
-            [class.ring-indigo-200]="selectedStepId() === step.id"
-            [class.border-slate-200]="selectedStepId() !== step.id"
+            [style.height.px]="nodeHeight"
             (pointerdown)="startNodeDrag($event, step)"
             (click)="selectStep(step.id)"
           >
-            <p class="truncate font-mono text-[10px] text-slate-400">{{ step.id }}</p>
-            <p class="truncate text-xs font-semibold text-slate-800">{{ step.type }}</p>
-            <p class="mt-0.5 truncate text-[10px] text-slate-500">{{ nodeSummary(step) }}</p>
+            @if (step.type === 'start-event' || step.type === 'end-event') {
+              <div
+                class="absolute left-1/2 top-1/2 flex size-14 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-2 bg-white shadow-sm"
+                [class.border-emerald-500]="step.type === 'start-event'"
+                [class.border-rose-600]="step.type === 'end-event'"
+                [style.borderWidth.px]="step.type === 'end-event' ? 3 : 2"
+                [class.ring-2]="selectedStepId() === step.id"
+                [class.ring-indigo-200]="selectedStepId() === step.id"
+              >
+                <span class="text-[9px] font-semibold text-slate-600">{{ step.type === 'start-event' ? 'Start' : 'Ende' }}</span>
+              </div>
+              <p class="absolute top-full mt-1 truncate text-center font-mono text-[9px] text-slate-400" [style.width.px]="nodeWidth">{{ step.id }}</p>
+            } @else if (step.type === 'exclusive-gateway' || step.type === 'parallel') {
+              <div
+                class="absolute left-1/2 top-1/2 size-12 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-amber-500 bg-white shadow-sm"
+                [class.ring-2]="selectedStepId() === step.id"
+                [class.ring-indigo-200]="selectedStepId() === step.id"
+              ></div>
+              <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base font-bold text-amber-600">
+                {{ step.type === 'exclusive-gateway' ? '×' : '+' }}
+              </div>
+              <p class="absolute top-full mt-1 truncate text-center font-mono text-[9px] text-slate-400" [style.width.px]="nodeWidth">
+                {{ step.id }} · {{ nodeSummary(step) }}
+              </p>
+            } @else {
+              <div
+                class="absolute inset-0 rounded-xl border bg-white p-2.5 shadow-sm"
+                [class.border-indigo-500]="selectedStepId() === step.id"
+                [class.ring-2]="selectedStepId() === step.id"
+                [class.ring-indigo-200]="selectedStepId() === step.id"
+                [class.border-slate-200]="selectedStepId() !== step.id"
+              >
+                @if (step.type === 'agent') {
+                  <span class="absolute -top-2 right-2 rounded-full bg-violet-600 px-1.5 py-0.5 text-[8px] font-semibold text-white">AGENT</span>
+                }
+                <p class="truncate font-mono text-[10px] text-slate-400">{{ step.id }}</p>
+                <p class="truncate text-xs font-semibold text-slate-800">{{ step.type }}</p>
+                <p class="mt-0.5 truncate text-[10px] text-slate-500">{{ nodeSummary(step) }}</p>
+              </div>
+            }
 
             @if (step.id === startStepId()) {
-              <span class="absolute -top-2 left-2 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[8px] font-semibold text-white">
+              <span class="absolute -top-2 left-2 z-10 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[8px] font-semibold text-white">
                 START
               </span>
             }
@@ -381,6 +422,80 @@
                   (ngModelChange)="updateStep(step.id, { input: $event })"
                 />
               </label>
+            } @else if (step.type === 'rule') {
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Regel-Key
+                <input
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs outline-none focus:border-indigo-400"
+                  placeholder="z. B. einkaufsrichtlinie"
+                  [ngModel]="step.ruleKey"
+                  (ngModelChange)="updateStep(step.id, { ruleKey: $event })"
+                />
+              </label>
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Input (JSON, optional)
+                <input
+                  elvVariableAutocomplete
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs outline-none focus:border-indigo-400"
+                  placeholder="$context.step1"
+                  [ngModel]="step.input"
+                  (ngModelChange)="updateStep(step.id, { input: $event })"
+                />
+              </label>
+            } @else if (step.type === 'agent') {
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Task
+                <textarea
+                  elvVariableAutocomplete
+                  class="min-h-20 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                  placeholder="z. B. Fasse $context.step1 in drei Sätzen zusammen"
+                  [ngModel]="step.task"
+                  (ngModelChange)="updateStep(step.id, { task: $event })"
+                ></textarea>
+              </label>
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Timeout (Sekunden)
+                <input
+                  type="number"
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                  [ngModel]="step.timeoutSeconds"
+                  (ngModelChange)="updateStep(step.id, { timeoutSeconds: $event })"
+                />
+              </label>
+              <p class="text-[10px] text-slate-400">Startet einen agent-engine-Lauf und wartet, bis er fertig ist — der n8n-"AI Agent Node"-Ansatz, als eigener Workflow-Step.</p>
+            } @else if (step.type === 'start-event' || step.type === 'end-event') {
+              <p class="text-[10px] text-slate-400">
+                {{ step.type === 'start-event' ? 'Markiert, wo der Workflow beginnt — keine eigene Logik.' : 'Markiert, wo der Workflow endet — keine eigene Logik.' }}
+              </p>
+            } @else if (step.type === 'exclusive-gateway') {
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Regel-Key
+                <input
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs outline-none focus:border-indigo-400"
+                  placeholder="z. B. einkaufsrichtlinie"
+                  [ngModel]="step.ruleKey"
+                  (ngModelChange)="updateStep(step.id, { ruleKey: $event })"
+                />
+              </label>
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Input (JSON, optional)
+                <input
+                  elvVariableAutocomplete
+                  class="w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs outline-none focus:border-indigo-400"
+                  placeholder="$context.step1"
+                  [ngModel]="step.input"
+                  (ngModelChange)="updateStep(step.id, { input: $event })"
+                />
+              </label>
+              <label class="block space-y-1 text-[10px] text-slate-500">
+                Cases (JSON: [&#123; "value": "...", "next": ["stepId"] &#125;])
+                <textarea
+                  class="min-h-24 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                  [ngModel]="step.gatewayCasesJson"
+                  (ngModelChange)="updateStep(step.id, { gatewayCasesJson: $event })"
+                ></textarea>
+              </label>
+              <p class="text-[10px] text-slate-400">Der Regel-Output wird (als Text) gegen jeden Case-Wert geprüft — der erste Treffer gewinnt. "Sonst"-Port (unten) greift, wenn keiner passt.</p>
             }
 
             <div class="space-y-2 border-t border-slate-100 pt-3">

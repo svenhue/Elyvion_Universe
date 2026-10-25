@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
 import { createDeploymentSchema, createTargetSchema } from './dto/deployments.dto';
 import { DeploymentsService } from './deployments.service';
@@ -27,8 +27,8 @@ export class DeploymentsController {
   }
 
   @Get('deployments')
-  async list() {
-    return envelope(await this.deployments.list());
+  async list(@Query('solutionKey') solutionKey?: string) {
+    return envelope(await this.deployments.list(solutionKey));
   }
 
   @Get('deployments/:id')

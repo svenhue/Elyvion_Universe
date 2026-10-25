@@ -1,0 +1,165 @@
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
+    <div class="mb-3 flex h-8 shrink-0 items-center gap-2">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Lösungen</h1>
+    </div>
+
+    @if (loadError()) {
+      <p class="mb-2 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700">{{ loadError() }}</p>
+    }
+
+    <div class="mb-3 space-y-1">
+      @for (solution of solutions(); track solution._id) {
+        <button
+          type="button"
+          (click)="select(solution.key)"
+          class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition"
+          [class.bg-indigo-100]="selectedKey() === solution.key"
+          [class.hover:bg-slate-100]="selectedKey() !== solution.key"
+        >
+          <span>{{ solution.name }}</span>
+          <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] text-slate-500">{{ solution.members.length }}</span>
+        </button>
+      } @empty {
+        <p class="px-2.5 py-1.5 text-xs text-slate-400">Noch keine Lösungen angelegt.</p>
+      }
+    </div>
+
+    <form class="space-y-2 border-t border-slate-200 pt-3 text-xs" (ngSubmit)="createSolution()">
+      <p class="font-medium text-slate-700">Neue Lösung</p>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Key (z. B. kunden-portal)"
+        [ngModel]="newKey()"
+        (ngModelChange)="newKey.set($event)"
+        name="newKey"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Name"
+        [ngModel]="newName()"
+        (ngModelChange)="newName.set($event)"
+        name="newName"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Beschreibung (optional)"
+        [ngModel]="newDescription()"
+        (ngModelChange)="newDescription.set($event)"
+        name="newDescription"
+      />
+      <button type="submit" class="w-full rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white" [disabled]="creating()">
+        {{ creating() ? 'Lege an…' : 'Lösung anlegen' }}
+      </button>
+    </form>
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6">
+    @if (selectedSolution(); as solution) {
+      <div class="mb-6 flex items-start justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">{{ solution.name }}</h2>
+          <p class="text-xs text-slate-500">{{ solution.key }} — {{ solution.description || 'Keine Beschreibung.' }}</p>
+        </div>
+        <button type="button" class="rounded-md bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700" (click)="removeSolution(solution.key)">
+          Löschen
+        </button>
+      </div>
+
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Mitglieder</h3>
+      <table class="mb-6 w-full border-collapse text-xs">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+            <th class="py-2">Typ</th>
+            <th class="py-2">Key</th>
+            <th class="py-2">Label</th>
+            <th class="py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (member of solution.members; track member.resourceType + member.resourceKey) {
+            <tr class="border-b border-slate-100">
+              <td class="py-2">
+                <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{{ member.resourceType }}</span>
+              </td>
+              <td class="py-2 font-mono text-slate-700">{{ member.resourceKey }}</td>
+              <td class="py-2 text-slate-500">{{ member.label || '—' }}</td>
+              <td class="py-2 text-right">
+                <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeMember(member.resourceType, member.resourceKey)">×</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="4" class="py-6 text-center text-slate-400">Noch keine Mitglieder.</td></tr>
+          }
+        </tbody>
+      </table>
+
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Deployed in</h3>
+      <table class="mb-6 w-full border-collapse text-xs">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+            <th class="py-2">Deployment</th>
+            <th class="py-2">Umgebung</th>
+            <th class="py-2">Status</th>
+            <th class="py-2">URL</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (deploymentsLoading()) {
+            <tr><td colspan="4" class="py-6 text-center text-slate-400">Lade…</td></tr>
+          } @else {
+            @for (deployment of deployments(); track deployment._id) {
+              <tr class="border-b border-slate-100">
+                <td class="py-2 font-medium text-slate-700">{{ deployment.name }}</td>
+                <td class="py-2 text-slate-500">{{ targetName(deployment.targetId) }}</td>
+                <td class="py-2">
+                  <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{{ deployment.status }}</span>
+                </td>
+                <td class="py-2">
+                  @if (deployment.url) {
+                    <a [href]="deployment.url" target="_blank" class="text-indigo-600 hover:underline">{{ deployment.url }}</a>
+                  } @else {
+                    <span class="text-slate-400">—</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="py-6 text-center text-slate-400">Noch in keiner Umgebung deployed.</td></tr>
+            }
+          }
+        </tbody>
+      </table>
+
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Mitglied hinzufügen</h3>
+      <div class="grid grid-cols-[8rem_1fr_1fr_auto] gap-2">
+        <select
+          class="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          [ngModel]="newMemberType()"
+          (ngModelChange)="newMemberType.set($event)"
+        >
+          @for (type of memberTypes; track type) {
+            <option [value]="type">{{ type }}</option>
+          }
+        </select>
+        <input
+          class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+          placeholder="Resource-Key (z. B. app-default, transport-demo)"
+          [ngModel]="newMemberKey()"
+          (ngModelChange)="newMemberKey.set($event)"
+        />
+        <input
+          class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+          placeholder="Label (optional)"
+          [ngModel]="newMemberLabel()"
+          (ngModelChange)="newMemberLabel.set($event)"
+        />
+        <button type="button" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white" (click)="addMember()">
+          Hinzufügen
+        </button>
+      </div>
+    } @else {
+      <p class="text-sm text-slate-400">Lösung aus der Liste wählen oder eine neue anlegen.</p>
+    }
+  </div>
+</main>

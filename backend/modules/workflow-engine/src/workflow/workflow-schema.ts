@@ -13,7 +13,12 @@ export type WorkflowStepType =
   | 'condition'
   | 'delay'
   | 'parallel'
-  | 'action';
+  | 'action'
+  | 'rule'
+  | 'agent'
+  | 'start-event'
+  | 'end-event'
+  | 'exclusive-gateway';
 
 export interface WorkflowStepBase {
   id: string;
@@ -78,6 +83,65 @@ export interface ActionStep extends WorkflowStepBase {
   input?: unknown;
 }
 
+export interface RuleStep extends WorkflowStepBase {
+  type: 'rule';
+  /** A key from `rules-engine`'s `GET /rules`. */
+  ruleKey: string;
+  input?: unknown;
+}
+
+/**
+ * An agent, embedded directly as a workflow node — the pattern n8n's own
+ * "AI Agent" node uses: give it a task, it runs (`agent-engine` designs
+ * and runs a team against it), and its final answer becomes this step's
+ * output, usable by whatever runs next. Polls `agent-engine` rather than
+ * firing-and-forgetting, since the step after this one typically needs
+ * the agent's actual answer.
+ */
+export interface AgentStep extends WorkflowStepBase {
+  type: 'agent';
+  /** Literal task text, or a `$context...` path — resolved against the run's context, same as `action`/`http-request`. */
+  task: unknown;
+  /** How long to poll before failing this step (default 120s) — an agent run has no fixed upper bound otherwise. */
+  timeoutSeconds?: number;
+}
+
+/**
+ * BPMN-lite: a start/end event is a pure marker (no runtime behavior of
+ * its own) that makes the flow's entry/exit points visible in the
+ * builder, rather than relying solely on `startStepId` and "a step with
+ * no `next`" to communicate that — a start event just passes straight
+ * through to `next`; an end event has no `next` at all, so the run
+ * finishes exactly like it already does at any other terminal step.
+ */
+export interface StartEventStep extends WorkflowStepBase {
+  type: 'start-event';
+}
+
+export interface EndEventStep extends WorkflowStepBase {
+  type: 'end-event';
+}
+
+export interface ExclusiveGatewayCase {
+  /** Compared against the rule's output, stringified — the first matching case's `next` wins. */
+  value: string;
+  next: string[];
+}
+
+/**
+ * BPMN's XOR gateway: runs a `rules-engine` rule and branches on its
+ * output — "in einem XOR-Gateway kann eine Geschäftsregel verwendet
+ * werden, die einen passenden Output-Wert hat, der wird dann geprüft."
+ * `next` (inherited from `WorkflowStepBase`) is the fallback when no
+ * case matches the rule's output.
+ */
+export interface ExclusiveGatewayStep extends WorkflowStepBase {
+  type: 'exclusive-gateway';
+  ruleKey: string;
+  input?: unknown;
+  cases: ExclusiveGatewayCase[];
+}
+
 export type WorkflowStep =
   | SetVariableStep
   | HttpRequestStep
@@ -85,7 +149,12 @@ export type WorkflowStep =
   | ConditionStep
   | DelayStep
   | ParallelStep
-  | ActionStep;
+  | ActionStep
+  | RuleStep
+  | AgentStep
+  | StartEventStep
+  | EndEventStep
+  | ExclusiveGatewayStep;
 
 export interface WorkflowDefinitionBody {
   startStepId: string;

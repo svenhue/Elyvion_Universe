@@ -54,6 +54,18 @@ export const routes: Routes = [
           path: 'deployments',
           loadComponent: () => import('@elyvion/shared-lib').then((module) => module.DeploymentEngineComponent),
         },
+        {
+          path: 'solutions',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.SolutionsComponent),
+        },
+        {
+          path: 'rules',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.RulesEngineComponent),
+        },
+        {
+          path: 'repository',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.RepositoryComponent),
+        },
       ],
     },
     { path: 'admin', children: elvAdminRoutes },

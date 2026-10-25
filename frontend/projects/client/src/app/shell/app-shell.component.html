@@ -33,6 +33,11 @@
     </div>
 
     <a
+      routerLink="/repository"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Kernrepository</a>
+    <a
       routerLink="/pro-code"
       routerLinkActive="bg-slate-800 text-white"
       class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
@@ -46,7 +51,7 @@
       routerLink="/ontologies"
       routerLinkActive="bg-slate-800 text-white"
       class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
-    >Ontologien</a>
+    >Schema und Graphen</a>
     <a
       routerLink="/agents"
       routerLinkActive="bg-slate-800 text-white"
@@ -81,7 +86,17 @@
       routerLink="/deployments"
       routerLinkActive="bg-slate-800 text-white"
       class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
-    >Deployments</a>
+    >Umgebung</a>
+    <a
+      routerLink="/solutions"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Lösungen</a>
+    <a
+      routerLink="/rules"
+      routerLinkActive="bg-slate-800 text-white"
+      class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+    >Logik</a>
   </nav>
   <div class="min-w-0 flex-1">
     <router-outlet />

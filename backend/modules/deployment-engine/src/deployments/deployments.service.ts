@@ -40,7 +40,12 @@ export class DeploymentsService {
   /** Builds + runs the application on the given target — "einen Docker-Container lokal erstellen" for `local-docker`. */
   async deploy(dto: CreateDeploymentDto) {
     const target = await this.findTarget(dto.targetId);
-    const deployment = await this.deployments.create({ name: dto.name, targetId: target._id, status: 'building' });
+    const deployment = await this.deployments.create({
+      name: dto.name,
+      targetId: target._id,
+      solutionKey: dto.solutionKey,
+      status: 'building',
+    });
 
     try {
       const result = await this.executors.get(target.type).deploy(dto.name, target.config);
@@ -61,8 +66,11 @@ export class DeploymentsService {
     return this.deployments.findById(deployment._id).lean();
   }
 
-  list() {
-    return this.deployments.find().sort({ createdAt: -1 }).lean();
+  list(solutionKey?: string) {
+    return this.deployments
+      .find(solutionKey ? { solutionKey } : {})
+      .sort({ createdAt: -1 })
+      .lean();
   }
 
   async findOne(id: string) {

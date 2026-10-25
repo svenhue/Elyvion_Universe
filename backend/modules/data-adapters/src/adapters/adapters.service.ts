@@ -3,12 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { Model, Types } from 'mongoose';
+import { recordVersion } from '@elyvion/shared';
 import { ConnectorRegistry } from './connectors/connector-registry';
 import { CreateAdapterDto, UpdateAdapterDto } from './dto/adapters.dto';
 import { DataAdapterConfig, DataAdapterConfigDocument } from './schemas/data-adapter.schema';
 import { DataAdapterRun, DataAdapterRunDocument } from './schemas/data-adapter-run.schema';
 
 const CRON_PREFIX = 'data-adapter:';
+const VERSION_CONTROL_URL = process.env.VERSION_CONTROL_URL ?? 'http://localhost:3026';
 
 /**
  * Owns adapter CRUD, run history, and the one thing the REST layer
@@ -64,6 +66,13 @@ export class AdaptersService implements OnModuleInit {
     if (dto.type || dto.connectionConfig) {
       this.connectors.get(merged.type).validateConfig(merged.connectionConfig);
     }
+
+    void recordVersion({
+      versionControlUrl: VERSION_CONTROL_URL,
+      resourceType: 'data-adapter',
+      resourceKey: id,
+      snapshot: existing,
+    });
 
     const doc = await this.adapters.findByIdAndUpdate(id, dto, { new: true }).lean();
     this.unregisterCronJob(id);

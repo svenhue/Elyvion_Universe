@@ -22,6 +22,7 @@ from fastapi import HTTPException, status
 from neo4j import AsyncSession
 
 from .schemas import (
+    KnowledgeGraphValidationReport,
     Ontology,
     OntologyCreate,
     OntologyEdge,
@@ -30,6 +31,7 @@ from .schemas import (
     OntologyNode,
     OntologyNodeCreate,
     OntologyNodeUpdate,
+    RelationshipTypeMismatch,
 )
 
 
@@ -51,6 +53,7 @@ def _ontology_from_record(record: dict[str, Any]) -> Ontology:
         name=node["name"],
         description=node.get("description"),
         type=node.get("type", "custom"),
+        conforms_to=node.get("conformsTo"),
         created_at=_to_datetime(node["createdAt"]),
         updated_at=_to_datetime(node["updatedAt"]),
     )
@@ -97,12 +100,13 @@ async def create_ontology(session: AsyncSession, payload: OntologyCreate) -> Ont
     now = _now()
     result = await session.run(
         "CREATE (o:Ontology {id: $id, key: $key, name: $name, description: $description, "
-        "type: $type, createdAt: $now, updatedAt: $now}) RETURN o",
+        "type: $type, conformsTo: $conformsTo, createdAt: $now, updatedAt: $now}) RETURN o",
         id=str(uuid4()),
         key=payload.key,
         name=payload.name,
         description=payload.description,
         type=payload.type,
+        conformsTo=payload.conforms_to,
         now=now,
     )
     record = await result.single()
@@ -294,3 +298,59 @@ async def get_graph(session: AsyncSession, ontology_key: str) -> tuple[list[Onto
     nodes = await list_nodes(session, ontology_key)
     edges = await list_edges(session, ontology_key)
     return nodes, edges
+
+
+# --- Validating a knowledge graph against a (formal) Ontology ---
+
+
+async def validate_knowledge_graph(
+    session: AsyncSession, knowledge_graph_key: str, ontology_key: str
+) -> KnowledgeGraphValidationReport:
+    """
+    A report, not a gate: existing knowledge graphs (an app's synced
+    `angular_app_config`, for instance) use node/relationship type
+    vocabularies the seeded platform Ontology doesn't cover yet, so this
+    never blocks a write — it tells you what's NOT covered, which is the
+    useful signal for deciding whether to extend the Ontology or fix the
+    knowledge graph's data.
+    """
+    ontology_nodes, ontology_edges = await get_graph(session, ontology_key)
+    class_by_id = {node.id: node.name for node in ontology_nodes}
+    known_classes = set(class_by_id.values())
+    # (relationship type, source class, target class) triples the Ontology actually declares.
+    known_relationships: dict[str, list[tuple[str, str]]] = {}
+    for edge in ontology_edges:
+        pair = (class_by_id.get(edge.source_id, ""), class_by_id.get(edge.target_id, ""))
+        known_relationships.setdefault(edge.type, []).append(pair)
+
+    kg_nodes, kg_edges = await get_graph(session, knowledge_graph_key)
+    node_type_by_id = {node.id: node.type for node in kg_nodes}
+
+    unknown_node_types = sorted({node.type for node in kg_nodes if node.type not in known_classes})
+    unknown_relationship_types: list[str] = []
+    mismatches: list[RelationshipTypeMismatch] = []
+
+    for edge in kg_edges:
+        allowed_pairs = known_relationships.get(edge.type)
+        if allowed_pairs is None:
+            unknown_relationship_types.append(edge.type)
+            continue
+        actual_pair = (node_type_by_id.get(edge.source_id, "?"), node_type_by_id.get(edge.target_id, "?"))
+        if actual_pair not in allowed_pairs:
+            mismatches.append(
+                RelationshipTypeMismatch(
+                    edge_id=edge.id,
+                    type=edge.type,
+                    expected=" | ".join(f"{s} -> {t}" for s, t in allowed_pairs),
+                    actual=f"{actual_pair[0]} -> {actual_pair[1]}",
+                )
+            )
+
+    return KnowledgeGraphValidationReport(
+        ontology_key=ontology_key,
+        knowledge_graph_key=knowledge_graph_key,
+        valid=not unknown_node_types and not unknown_relationship_types and not mismatches,
+        unknown_node_types=unknown_node_types,
+        unknown_relationship_types=sorted(set(unknown_relationship_types)),
+        relationship_type_mismatches=mismatches,
+    )

@@ -31,6 +31,7 @@ export class DeploymentEngineComponent implements OnInit {
 
   readonly newDeploymentName = signal('');
   readonly newDeploymentTargetId = signal('');
+  readonly newDeploymentSolutionKey = signal('');
   readonly deploying = signal(false);
   readonly deployError = signal('');
 
@@ -77,8 +78,9 @@ export class DeploymentEngineComponent implements OnInit {
     this.deploying.set(true);
     this.deployError.set('');
     try {
-      const deployment = await firstValueFrom(this.api.deploy(name, targetId));
+      const deployment = await firstValueFrom(this.api.deploy(name, targetId, this.newDeploymentSolutionKey().trim() || undefined));
       this.newDeploymentName.set('');
+      this.newDeploymentSolutionKey.set('');
       this.deployments.update((deployments) => [deployment, ...deployments]);
     } catch (error) {
       this.deployError.set(error instanceof Error ? error.message : 'Deployment fehlgeschlagen.');

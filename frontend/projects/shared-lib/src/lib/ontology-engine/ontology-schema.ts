@@ -25,6 +25,8 @@ export interface Ontology {
   name: string;
   description?: string | null;
   type: OntologyType;
+  /** The key of the formal Ontology this knowledge graph's node/edge types should conform to — see `platform-ontology` and `OntologyApiService.validateGraph`. */
+  conforms_to?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,7 @@ export interface OntologyCreatePayload {
   name: string;
   description?: string;
   type?: OntologyType;
+  conforms_to?: string;
 }
 
 export interface OntologyNode {
@@ -91,4 +94,21 @@ export interface OntologyEdgeUpdatePayload {
 export interface OntologyGraph {
   nodes: OntologyNode[];
   edges: OntologyEdge[];
+}
+
+export interface RelationshipTypeMismatch {
+  edge_id: string;
+  type: string;
+  expected: string;
+  actual: string;
+}
+
+/** Mirrors the backend's `KnowledgeGraphValidationReport` — a report, not a write-time gate (see `ontology-engine`'s README). */
+export interface KnowledgeGraphValidationReport {
+  ontology_key: string;
+  knowledge_graph_key: string;
+  valid: boolean;
+  unknown_node_types: string[];
+  unknown_relationship_types: string[];
+  relationship_type_mismatches: RelationshipTypeMismatch[];
 }
