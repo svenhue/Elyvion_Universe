@@ -2,22 +2,35 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 /**
- * What kind of thing a member reference points at — each type's actual
- * record lives in its own module (app-config, workflow-engine,
- * agent-engine, ontology-engine, data-engine); a Solution only ever
- * holds a reference (`resourceType` + `resourceKey`), never a copy.
- * Named "ResourceType" in code because "Resource" is already how the
- * `security` module calls a backend module acting as a permission
- * boundary — a *different* concept from a Solution member — so this
- * type lives entirely inside `SolutionMember`, never exported standalone,
+ * What kind of thing a member reference points at — every object type
+ * the platform manages (app-config, workflow-engine, agent-engine,
+ * actions-engine, rules-engine, ontology-engine, data-engine, and
+ * `repository`/`solution` themselves). Shared verbatim with the
+ * `repository` module's own `RepositoryMember` — both are just typed
+ * references into the owning module, never a copy.
+ *
+ * Named "ResourceType" in code even though "Resource" is already how
+ * the `security` module calls a backend module acting as a permission
+ * boundary — a *different* concept. Kept scoped to `SolutionMember`/
+ * `RepositoryMember` (never exported as a bare top-level "Resource")
  * to keep the two apart.
  */
-export const SOLUTION_MEMBER_TYPES = ['application', 'workflow', 'agent', 'knowledge_graph', 'entity'] as const;
-export type SolutionMemberType = (typeof SOLUTION_MEMBER_TYPES)[number];
+export const RESOURCE_TYPES = [
+  'application',
+  'workflow',
+  'agent',
+  'knowledge_graph',
+  'entity',
+  'action',
+  'rule',
+  'repository',
+  'solution',
+] as const;
+export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 export class SolutionMember {
-  @Prop({ enum: SOLUTION_MEMBER_TYPES, required: true })
-  resourceType!: SolutionMemberType;
+  @Prop({ enum: RESOURCE_TYPES, required: true })
+  resourceType!: ResourceType;
 
   /** The member's own natural key in its owning module (an app-config applicationId, a workflow key, an agent-engine config id, an ontology-engine knowledge-graph key, a data-engine entity name). */
   @Prop({ required: true })
@@ -47,6 +60,10 @@ export class Solution {
 
   @Prop()
   description?: string;
+
+  /** Set when this Solution is the deploy-snapshot of a `repository` module Repository — see "Repository deployen". */
+  @Prop()
+  sourceRepositoryKey?: string;
 
   @Prop({ type: [SolutionMember], default: [] })
   members!: SolutionMember[];

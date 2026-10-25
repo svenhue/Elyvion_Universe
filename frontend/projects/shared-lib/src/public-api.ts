@@ -130,6 +130,8 @@ export * from './lib/rules-engine/rules-engine-api.service';
 export * from './lib/rules-engine/rules-engine.component';
 export * from './lib/rules-engine/rules-engine.nav';
 
+export * from './lib/repository/resource-type';
 export * from './lib/repository/repository-schema';
+export * from './lib/repository/repositories-api.service';
 export * from './lib/repository/repository.component';
 export * from './lib/repository/repository.nav';

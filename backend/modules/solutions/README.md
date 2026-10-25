@@ -8,8 +8,12 @@ The user's own term for this concept is "Ressource." That collides with `securit
 
 ## Model
 
-- **`Solution`** — `key`, `name`, `description`, and a `members` array.
-- **`SolutionMember`** — `{ resourceType, resourceKey, label? }`. A Solution never copies another module's data, only references it: `resourceType` is one of `application | workflow | agent | knowledge_graph | entity`, and `resourceKey` is that member's own natural key in its owning module (an `app-config` applicationId, a `workflow-engine` workflow key, an `agent-engine` config id, an `ontology-engine` knowledge-graph key, or a `data-engine` entity name).
+- **`Solution`** — `key`, `name`, `description?`, `sourceRepositoryKey?`, and a `members` array.
+- **`SolutionMember`** — `{ resourceType, resourceKey, label? }`. A Solution never copies another module's data, only references it: `resourceType` is one of `application | workflow | agent | knowledge_graph | entity | action | rule | repository | solution` (the same `ResourceType` union `repository`'s own `RepositoryMember` uses — duplicated per module, not shared, since each is deployed independently), and `resourceKey` is that member's own natural key in its owning module.
+
+## Repository → Solution ("Repository deployen")
+
+A Solution can be the deploy-time snapshot of a `repository` module Repository — set `sourceRepositoryKey` on create. Redeploying the same Repository either creates a fresh Solution (new key) or overwrites the linked one's members via `PATCH /solutions/:key/members`; both are the frontend's choice at deploy time, made by first checking `GET /solutions?sourceRepositoryKey=` for an existing link. This module itself stays unaware of Repository — all orchestration is in the frontend.
 
 ## What's deliberately not done yet
 
@@ -21,4 +25,4 @@ Deploying a Solution "as a whole" is not yet a single build: `deployment-engine`
 
 ## Endpoints
 
-`POST /solutions`, `GET /solutions`, `GET /solutions/:key`, `DELETE /solutions/:key`, `POST /solutions/:key/members`, `DELETE /solutions/:key/members/:resourceType/:resourceKey`.
+`POST /solutions`, `GET /solutions?sourceRepositoryKey=`, `GET /solutions/:key`, `DELETE /solutions/:key`, `POST /solutions/:key/members`, `PATCH /solutions/:key/members` (replace all), `DELETE /solutions/:key/members/:resourceType/:resourceKey`.

@@ -2,6 +2,8 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { RepositoriesApiService } from '../repository/repositories-api.service';
+import { RepositoryCopyRef } from '../repository/repository-schema';
 import { RulesEngineApiService } from './rules-engine-api.service';
 import { RULE_BLOCK_TYPES, Rule, RuleBlockType, defaultBlockFor } from './rules-engine-schema';
 
@@ -22,6 +24,11 @@ import { RULE_BLOCK_TYPES, Rule, RuleBlockType, defaultBlockFor } from './rules-
 })
 export class RulesEngineComponent implements OnInit {
   private readonly api = inject(RulesEngineApiService);
+  private readonly repositoriesApi = inject(RepositoriesApiService);
+
+  /** Copies (in some Repository) of the currently-saved rule, offered right after a successful save — "wird gefragt, ob das in dem anderen Repository auch geupdatet werden soll." */
+  readonly pendingCopyUpdates = signal<RepositoryCopyRef[]>([]);
+  readonly copyUpdateStatus = signal<Record<string, string>>({});
 
   readonly blockTypes = RULE_BLOCK_TYPES;
   readonly rules = signal<Rule[]>([]);
@@ -62,6 +69,7 @@ export class RulesEngineComponent implements OnInit {
     this.blocksError.set('');
     this.testResult.set(null);
     this.testError.set('');
+    this.pendingCopyUpdates.set([]);
   }
 
   async createRule(): Promise<void> {
@@ -108,11 +116,30 @@ export class RulesEngineComponent implements OnInit {
       const blocks = JSON.parse(this.blocksJson());
       const updated = await firstValueFrom(this.api.updateBlocks(key, blocks));
       this.rules.update((rules) => rules.map((r) => (r.key === key ? updated : r)));
+      this.pendingCopyUpdates.set(await firstValueFrom(this.repositoriesApi.copiesOf('rule', key)));
+      this.copyUpdateStatus.set({});
     } catch (error) {
       this.blocksError.set(error instanceof Error ? error.message : 'Blöcke konnten nicht gespeichert werden.');
     } finally {
       this.savingBlocks.set(false);
     }
+  }
+
+  async applyCopyUpdate(copy: RepositoryCopyRef): Promise<void> {
+    try {
+      const blocks = JSON.parse(this.blocksJson());
+      await firstValueFrom(this.api.updateBlocks(copy.resourceKey, blocks));
+      this.copyUpdateStatus.update((status) => ({ ...status, [copy.resourceKey]: 'Aktualisiert.' }));
+    } catch (error) {
+      this.copyUpdateStatus.update((status) => ({
+        ...status,
+        [copy.resourceKey]: error instanceof Error ? error.message : 'Fehlgeschlagen.',
+      }));
+    }
+  }
+
+  dismissCopyUpdate(copy: RepositoryCopyRef): void {
+    this.pendingCopyUpdates.update((copies) => copies.filter((c) => c.resourceKey !== copy.resourceKey));
   }
 
   async runTest(): Promise<void> {

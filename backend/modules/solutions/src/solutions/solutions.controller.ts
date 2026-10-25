@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
-import { addMemberSchema, createSolutionSchema } from './dto/solutions.dto';
+import { addMemberSchema, createSolutionSchema, setMembersSchema } from './dto/solutions.dto';
 import { SolutionsService } from './solutions.service';
 
 @Controller('solutions')
@@ -15,8 +15,8 @@ export class SolutionsController {
   }
 
   @Get()
-  async list() {
-    return envelope(await this.solutions.list());
+  async list(@Query('sourceRepositoryKey') sourceRepositoryKey?: string) {
+    return envelope(await this.solutions.list(sourceRepositoryKey));
   }
 
   @Get(':key')
@@ -35,6 +35,13 @@ export class SolutionsController {
     const parsed = addMemberSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
     return envelope(await this.solutions.addMember(key, parsed.data));
+  }
+
+  @Patch(':key/members')
+  async setMembers(@Param('key') key: string, @Body() body: unknown) {
+    const parsed = setMembersSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return envelope(await this.solutions.setMembers(key, parsed.data.members));
   }
 
   @Delete(':key/members/:resourceType/:resourceKey')

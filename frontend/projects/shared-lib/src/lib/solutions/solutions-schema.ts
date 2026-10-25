@@ -1,5 +1,7 @@
-export type SolutionMemberType = 'application' | 'workflow' | 'agent' | 'knowledge_graph' | 'entity';
-export const SOLUTION_MEMBER_TYPES: SolutionMemberType[] = ['application', 'workflow', 'agent', 'knowledge_graph', 'entity'];
+import { RESOURCE_TYPES, ResourceType } from '../repository/resource-type';
+
+export type SolutionMemberType = ResourceType;
+export const SOLUTION_MEMBER_TYPES: SolutionMemberType[] = RESOURCE_TYPES;
 
 export interface SolutionMember {
   resourceType: SolutionMemberType;
@@ -12,6 +14,8 @@ export interface Solution {
   key: string;
   name: string;
   description?: string;
+  /** Set when this Solution is the deploy-snapshot of a `repository` module Repository. */
+  sourceRepositoryKey?: string;
   members: SolutionMember[];
   createdAt: string;
   updatedAt: string;

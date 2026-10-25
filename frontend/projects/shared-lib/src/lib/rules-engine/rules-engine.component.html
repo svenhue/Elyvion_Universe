@@ -89,6 +89,23 @@
         <button type="button" class="mt-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white" [disabled]="savingBlocks()" (click)="saveBlocks()">
           {{ savingBlocks() ? 'Speichere…' : 'Blöcke speichern' }}
         </button>
+
+        @if (pendingCopyUpdates().length) {
+          <div class="mt-3 space-y-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px]">
+            <p class="font-medium text-amber-800">Diese Kopien dieser Regel auch aktualisieren?</p>
+            @for (copy of pendingCopyUpdates(); track copy.repositoryKey + copy.resourceKey) {
+              <div class="flex items-center gap-2">
+                <span class="flex-1">{{ copy.repositoryName }} — <span class="font-mono">{{ copy.resourceKey }}</span></span>
+                @if (copyUpdateStatus()[copy.resourceKey]) {
+                  <span class="text-slate-500">{{ copyUpdateStatus()[copy.resourceKey] }}</span>
+                } @else {
+                  <button type="button" class="rounded-md bg-slate-900 px-2 py-1 text-white" (click)="applyCopyUpdate(copy)">Aktualisieren</button>
+                  <button type="button" class="rounded-md border border-slate-300 px-2 py-1 text-slate-600" (click)="dismissCopyUpdate(copy)">Ignorieren</button>
+                }
+              </div>
+            }
+          </div>
+        }
       </section>
 
       <section>

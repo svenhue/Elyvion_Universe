@@ -1,97 +1,267 @@
-<main class="h-full w-full overflow-y-auto bg-white p-6 font-sans text-slate-900">
-  <div class="mb-4 flex items-center gap-2">
-    <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
-    <h1 class="text-lg font-semibold">Kernrepository</h1>
-  </div>
-  <p class="mb-4 text-xs text-slate-500">
-    Alle Agents, Workflows, Entitäten, Data-Adapter und Regeln der Plattform — ein Katalog, von dem aus du direkt zu jedem
-    Objekt springen oder es einer Lösung hinzufügen kannst.
-  </p>
+<main class="flex h-full w-full overflow-hidden bg-white font-sans text-slate-900">
+  <aside class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
+    <div class="mb-3 flex h-8 shrink-0 items-center gap-2">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-sm font-semibold">Repositories</h1>
+    </div>
 
-  <div class="mb-4 flex flex-wrap items-center gap-2">
-    <input
-      class="w-64 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs"
-      placeholder="Suchen nach Name oder Key…"
-      [ngModel]="searchQuery()"
-      (ngModelChange)="searchQuery.set($event)"
-    />
-    <button
-      type="button"
-      class="rounded-full px-3 py-1 text-xs font-medium"
-      [class.bg-slate-900]="typeFilter() === 'all'"
-      [class.text-white]="typeFilter() === 'all'"
-      [class.bg-slate-100]="typeFilter() !== 'all'"
-      [class.text-slate-600]="typeFilter() !== 'all'"
-      (click)="typeFilter.set('all')"
-    >Alle</button>
-    @for (type of itemTypes; track type) {
+    <div class="mb-3 space-y-1">
       <button
         type="button"
-        class="rounded-full px-3 py-1 text-xs font-medium"
-        [class.bg-slate-900]="typeFilter() === type"
-        [class.text-white]="typeFilter() === type"
-        [class.bg-slate-100]="typeFilter() !== type"
-        [class.text-slate-600]="typeFilter() !== type"
-        (click)="typeFilter.set(type)"
-      >{{ typeLabels[type] }}</button>
+        (click)="selectScope(KERN)"
+        class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition"
+        [class.bg-indigo-100]="isKernSelected()"
+        [class.hover:bg-slate-100]="!isKernSelected()"
+      >
+        <span>Kernrepository</span>
+        <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] text-slate-500">Default</span>
+      </button>
+      @for (repo of repositories(); track repo._id) {
+        <button
+          type="button"
+          (click)="selectScope(repo.key)"
+          class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition"
+          [class.bg-indigo-100]="selectedScope() === repo.key"
+          [class.hover:bg-slate-100]="selectedScope() !== repo.key"
+        >
+          <span>{{ repo.name }}</span>
+          <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] text-slate-500">{{ repo.members.length }}</span>
+        </button>
+      } @empty {
+        <p class="px-2.5 py-1.5 text-[11px] text-slate-400">Noch keine eigenen Repositories.</p>
+      }
+    </div>
+
+    <form class="space-y-2 border-t border-slate-200 pt-3 text-xs" (ngSubmit)="createRepository()">
+      <p class="font-medium text-slate-700">Neues Repository</p>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Key (z. B. kunden-projekt)"
+        [ngModel]="newRepoKey()"
+        (ngModelChange)="newRepoKey.set($event)"
+        name="newRepoKey"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Name"
+        [ngModel]="newRepoName()"
+        (ngModelChange)="newRepoName.set($event)"
+        name="newRepoName"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Beschreibung (optional)"
+        [ngModel]="newRepoDescription()"
+        (ngModelChange)="newRepoDescription.set($event)"
+        name="newRepoDescription"
+      />
+      <button type="submit" class="w-full rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white" [disabled]="creatingRepo()">
+        {{ creatingRepo() ? 'Lege an…' : 'Repository anlegen' }}
+      </button>
+    </form>
+  </aside>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-6">
+    @if (isKernSelected()) {
+      <h2 class="mb-1 text-lg font-semibold">Kernrepository</h2>
+      <p class="mb-4 text-xs text-slate-500">
+        Alle Agents, Workflows, Entitäten, Data-Adapter und Regeln der Plattform — per Default liegt hier alles. Von hier aus
+        kannst du Objekte direkt einer Lösung hinzufügen oder in ein eigenes Repository kopieren.
+      </p>
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          class="w-64 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs"
+          placeholder="Suchen nach Name oder Key…"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
+        />
+        <button
+          type="button"
+          class="rounded-full px-3 py-1 text-xs font-medium"
+          [class.bg-slate-900]="typeFilter() === 'all'"
+          [class.text-white]="typeFilter() === 'all'"
+          [class.bg-slate-100]="typeFilter() !== 'all'"
+          [class.text-slate-600]="typeFilter() !== 'all'"
+          (click)="typeFilter.set('all')"
+        >Alle</button>
+        @for (type of itemTypes; track type) {
+          <button
+            type="button"
+            class="rounded-full px-3 py-1 text-xs font-medium"
+            [class.bg-slate-900]="typeFilter() === type"
+            [class.text-white]="typeFilter() === type"
+            [class.bg-slate-100]="typeFilter() !== type"
+            [class.text-slate-600]="typeFilter() !== type"
+            (click)="typeFilter.set(type)"
+          >{{ typeLabels[type] }}</button>
+        }
+      </div>
+
+      @if (loading()) {
+        <p class="text-xs text-slate-400">Lade…</p>
+      } @else {
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+              <th class="py-2">Typ</th>
+              <th class="py-2">Name</th>
+              <th class="py-2">Key</th>
+              <th class="py-2">Details</th>
+              <th class="py-2"></th>
+              <th class="py-2">In Lösung verwenden</th>
+              <th class="py-2">In Repository kopieren</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of filteredItems(); track itemId(item)) {
+              <tr class="border-b border-slate-100 align-top">
+                <td class="py-2">
+                  <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{{ typeLabels[item.type] }}</span>
+                </td>
+                <td class="py-2 font-medium text-slate-700">{{ item.name }}</td>
+                <td class="py-2 font-mono text-slate-500">{{ item.key }}</td>
+                <td class="py-2 text-slate-500">{{ item.detail || '—' }}</td>
+                <td class="py-2">
+                  <a [routerLink]="item.link" class="text-indigo-600 hover:underline">Öffnen</a>
+                </td>
+                <td class="py-2">
+                  @if (resourceType(item)) {
+                    <div class="flex items-center gap-1">
+                      <select
+                        class="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px]"
+                        [ngModel]="addTargetKey()[itemId(item)] || ''"
+                        (ngModelChange)="setAddTarget(item, $event)"
+                      >
+                        <option value="" disabled>Lösung wählen…</option>
+                        @for (solution of solutions(); track solution._id) {
+                          <option [value]="solution.key">{{ solution.name }}</option>
+                        }
+                      </select>
+                      <button type="button" class="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white" (click)="addToSolution(item)">
+                        +
+                      </button>
+                    </div>
+                    @if (addStatus()[itemId(item)]) {
+                      <span class="text-[10px] text-slate-400">{{ addStatus()[itemId(item)] }}</span>
+                    }
+                  } @else {
+                    <span class="text-slate-300">—</span>
+                  }
+                </td>
+                <td class="py-2">
+                  @if (isCopyable(item)) {
+                    <div class="flex items-center gap-1">
+                      <select
+                        class="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px]"
+                        [ngModel]="copyTargetRepoKey()[itemId(item)] || ''"
+                        (ngModelChange)="setCopyTarget(item, $event)"
+                      >
+                        <option value="" disabled>Repository wählen…</option>
+                        @for (repo of repositories(); track repo._id) {
+                          <option [value]="repo.key">{{ repo.name }}</option>
+                        }
+                      </select>
+                      <input
+                        class="w-24 rounded-md border border-slate-200 px-1.5 py-1 text-[11px]"
+                        [placeholder]="item.key + '-copy'"
+                        [ngModel]="copyNewKey()[itemId(item)] || ''"
+                        (ngModelChange)="setCopyNewKey(item, $event)"
+                      />
+                      <button type="button" class="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white" (click)="copyToRepository(item)">
+                        Kopieren
+                      </button>
+                    </div>
+                    @if (copyStatus()[itemId(item)]) {
+                      <span class="text-[10px] text-slate-400">{{ copyStatus()[itemId(item)] }}</span>
+                    }
+                  } @else {
+                    <span class="text-slate-300">—</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="py-6 text-center text-slate-400">Keine Objekte gefunden.</td></tr>
+            }
+          </tbody>
+        </table>
+      }
+    } @else if (selectedRepository(); as repo) {
+      <div class="mb-6 flex items-start justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">{{ repo.name }}</h2>
+          <p class="text-xs text-slate-500">{{ repo.key }} — {{ repo.description || 'Keine Beschreibung.' }}</p>
+        </div>
+        <button type="button" class="rounded-md bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700" (click)="removeRepository(repo.key)">
+          Löschen
+        </button>
+      </div>
+
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Mitglieder</h3>
+      <table class="mb-6 w-full border-collapse text-xs">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
+            <th class="py-2">Typ</th>
+            <th class="py-2">Key</th>
+            <th class="py-2">Label</th>
+            <th class="py-2">Herkunft</th>
+            <th class="py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (member of repo.members; track member.resourceType + member.resourceKey) {
+            <tr class="border-b border-slate-100">
+              <td class="py-2">
+                <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{{ resourceTypeLabels[member.resourceType] }}</span>
+              </td>
+              <td class="py-2 font-mono text-slate-700">{{ member.resourceKey }}</td>
+              <td class="py-2 text-slate-500">{{ member.label || '—' }}</td>
+              <td class="py-2 text-slate-500">
+                @if (member.copiedFrom) {
+                  Kopie von {{ resourceTypeLabels[member.copiedFrom.resourceType] }} „{{ member.copiedFrom.resourceKey }}"
+                } @else {
+                  direkt
+                }
+              </td>
+              <td class="py-2 text-right">
+                <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeRepoMember(member.resourceType, member.resourceKey)">×</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="5" class="py-6 text-center text-slate-400">Noch keine Mitglieder — im Kernrepository Objekte hierher kopieren.</td></tr>
+          }
+        </tbody>
+      </table>
+
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Als Lösung deployen</h3>
+      @if (deployStatus()) {
+        <p class="mb-2 text-[11px] text-slate-500">{{ deployStatus() }}</p>
+      }
+      @if (linkedSolutions().length) {
+        <div class="mb-3 flex items-center gap-2 rounded-md bg-slate-50 p-2 text-xs">
+          <span>Verknüpfte Lösung: <strong>{{ linkedSolutions()[0].name }}</strong> ({{ linkedSolutions()[0].key }}) — {{ linkedSolutions()[0].members.length }} Mitglied(er)</span>
+          <button type="button" class="ml-auto rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white" (click)="updateLinkedSolution()">
+            Jetzt aktualisieren
+          </button>
+        </div>
+      }
+      <div class="grid grid-cols-[1fr_1fr_auto] gap-2">
+        <input
+          class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+          placeholder="Neue Lösung — Key"
+          [ngModel]="newSolutionKey()"
+          (ngModelChange)="newSolutionKey.set($event)"
+        />
+        <input
+          class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+          placeholder="Neue Lösung — Name"
+          [ngModel]="newSolutionName()"
+          (ngModelChange)="newSolutionName.set($event)"
+        />
+        <button type="button" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white" (click)="createSolutionFromRepository()">
+          Neue Lösung erstellen
+        </button>
+      </div>
     }
   </div>
-
-  @if (loading()) {
-    <p class="text-xs text-slate-400">Lade…</p>
-  } @else {
-    <table class="w-full border-collapse text-xs">
-      <thead>
-        <tr class="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-400">
-          <th class="py-2">Typ</th>
-          <th class="py-2">Name</th>
-          <th class="py-2">Key</th>
-          <th class="py-2">Details</th>
-          <th class="py-2"></th>
-          <th class="py-2">In Lösung verwenden</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (item of filteredItems(); track itemId(item)) {
-          <tr class="border-b border-slate-100">
-            <td class="py-2">
-              <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{{ typeLabels[item.type] }}</span>
-            </td>
-            <td class="py-2 font-medium text-slate-700">{{ item.name }}</td>
-            <td class="py-2 font-mono text-slate-500">{{ item.key }}</td>
-            <td class="py-2 text-slate-500">{{ item.detail || '—' }}</td>
-            <td class="py-2">
-              <a [routerLink]="item.link" class="text-indigo-600 hover:underline">Öffnen</a>
-            </td>
-            <td class="py-2">
-              @if (solutionMemberType(item)) {
-                <div class="flex items-center gap-1">
-                  <select
-                    class="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px]"
-                    [ngModel]="addTargetKey()[itemId(item)] || ''"
-                    (ngModelChange)="setAddTarget(item, $event)"
-                  >
-                    <option value="" disabled>Lösung wählen…</option>
-                    @for (solution of solutions(); track solution._id) {
-                      <option [value]="solution.key">{{ solution.name }}</option>
-                    }
-                  </select>
-                  <button type="button" class="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white" (click)="addToSolution(item)">
-                    +
-                  </button>
-                  @if (addStatus()[itemId(item)]) {
-                    <span class="text-[10px] text-slate-400">{{ addStatus()[itemId(item)] }}</span>
-                  }
-                </div>
-              } @else {
-                <span class="text-slate-300">—</span>
-              }
-            </td>
-          </tr>
-        } @empty {
-          <tr><td colspan="6" class="py-6 text-center text-slate-400">Keine Objekte gefunden.</td></tr>
-        }
-      </tbody>
-    </table>
-  }
 </main>

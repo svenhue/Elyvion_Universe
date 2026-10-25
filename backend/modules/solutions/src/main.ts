@@ -69,7 +69,10 @@ async function bootstrap() {
       type: 'object',
       properties: {
         key: { type: 'string', description: 'Key der Ziel-Solution.' },
-        resourceType: { type: 'string', enum: ['application', 'workflow', 'agent', 'knowledge_graph', 'entity'] },
+        resourceType: {
+          type: 'string',
+          enum: ['application', 'workflow', 'agent', 'knowledge_graph', 'entity', 'action', 'rule', 'repository', 'solution'],
+        },
         resourceKey: { type: 'string' },
         label: { type: 'string' },
       },

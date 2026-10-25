@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { recordVersion } from '@elyvion/shared';
 import { AddMemberDto, CreateSolutionDto } from './dto/solutions.dto';
-import { Solution, SolutionDocument } from './schemas/solution.schema';
+import { Solution, SolutionDocument, SolutionMember } from './schemas/solution.schema';
 
 const VERSION_CONTROL_URL = process.env.VERSION_CONTROL_URL ?? 'http://localhost:3026';
 
@@ -18,8 +18,11 @@ export class SolutionsService {
     return doc.toObject();
   }
 
-  list() {
-    return this.model.find().sort({ name: 1 }).lean();
+  list(sourceRepositoryKey?: string) {
+    return this.model
+      .find(sourceRepositoryKey ? { sourceRepositoryKey } : {})
+      .sort({ name: 1 })
+      .lean();
   }
 
   async findOne(key: string) {
@@ -59,6 +62,19 @@ export class SolutionsService {
     const doc = await this.model
       .findOneAndUpdate({ key }, { $pull: { members: { resourceType, resourceKey } } }, { new: true })
       .lean();
+    return doc!;
+  }
+
+  /** Replaces the whole member list in one write — how "Repository deployen" (update mode) snapshots a repository's current members onto its linked Solution. */
+  async setMembers(key: string, members: SolutionMember[]) {
+    const before = await this.findOne(key);
+    void recordVersion({
+      versionControlUrl: VERSION_CONTROL_URL,
+      resourceType: 'solution',
+      resourceKey: key,
+      snapshot: before,
+    });
+    const doc = await this.model.findOneAndUpdate({ key }, { members }, { new: true }).lean();
     return doc!;
   }
 }

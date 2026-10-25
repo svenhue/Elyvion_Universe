@@ -9,13 +9,21 @@ export class SolutionsApiService {
   private readonly api = inject(ApiClientService);
   private static readonly MODULE = 'solutions';
 
-  list() {
-    return this.api.get<Solution[]>(SolutionsApiService.MODULE, '/solutions').pipe(map((r) => r.data));
+  list(sourceRepositoryKey?: string) {
+    const query = sourceRepositoryKey ? `?sourceRepositoryKey=${encodeURIComponent(sourceRepositoryKey)}` : '';
+    return this.api.get<Solution[]>(SolutionsApiService.MODULE, `/solutions${query}`).pipe(map((r) => r.data));
   }
 
-  create(key: string, name: string, description?: string) {
+  create(key: string, name: string, description?: string, sourceRepositoryKey?: string) {
     return this.api
-      .post<Solution>(SolutionsApiService.MODULE, '/solutions', { key, name, description })
+      .post<Solution>(SolutionsApiService.MODULE, '/solutions', { key, name, description, sourceRepositoryKey })
+      .pipe(map((r) => r.data));
+  }
+
+  /** Replaces a Solution's entire member list in one call — how "Repository deployen" (update mode) snapshots a repository's current members onto it. */
+  setMembers(key: string, members: SolutionMember[]) {
+    return this.api
+      .patch<Solution>(SolutionsApiService.MODULE, `/solutions/${key}/members`, { members })
       .pipe(map((r) => r.data));
   }
 
