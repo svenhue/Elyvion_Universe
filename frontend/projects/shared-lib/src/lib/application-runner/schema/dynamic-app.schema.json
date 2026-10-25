@@ -41,7 +41,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["component", "element", "text"],
+          "enum": ["component", "element", "text", "list"],
           "description": "Node kind. Defaults to component when name is set, element when element is set, and text otherwise."
         },
         "name": {
@@ -50,7 +50,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["component", "element", "text"],
+          "enum": ["component", "element", "text", "list"],
           "description": "Node kind. Defaults to component when name is set, element when element is set, otherwise text."
         },
         "element": {

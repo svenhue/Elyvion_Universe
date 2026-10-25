@@ -209,6 +209,15 @@
             />
           </label>
         </div>
+        <div class="px-3 pt-2">
+          <button
+            type="button"
+            class="w-full rounded-lg border border-dashed border-slate-700 px-2 py-1.5 text-[11px] text-slate-300 hover:border-indigo-400/60 hover:text-white"
+            [disabled]="saveStatus() === 'loading'"
+            (click)="addListNode()"
+            title="Datengebundene Liste — rendert ihre Kind-Elemente einmal pro Datensatz einer Entität"
+          >+ Liste (datengebunden)</button>
+        </div>
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div class="grid grid-cols-2 gap-2 p-3">
             @for (element of filteredElements(); track element.name) {
@@ -663,6 +672,61 @@
         </button>
       </div>
       <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+
+        @if (node.type === 'list') {
+          <section class="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+            <h3 class="text-[10px] font-semibold uppercase tracking-wider text-indigo-700">Datenquelle (Liste)</h3>
+            <label class="block space-y-1.5 text-xs text-slate-600">
+              <span class="font-medium">Entität</span>
+              <select
+                class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                [ngModel]="selectedListDataSource()?.entity ?? ''"
+                (ngModelChange)="updateListEntity($event)"
+              >
+                <option value="">— wählen —</option>
+                @for (entity of availableEntities(); track entity) {
+                  <option [value]="entity">{{ entity }}</option>
+                }
+              </select>
+            </label>
+            <label class="block space-y-1.5 text-xs text-slate-600">
+              <span class="font-medium">Item-Alias</span>
+              <input
+                class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                placeholder="z. B. issue"
+                [ngModel]="selectedListItemAlias()"
+                (ngModelChange)="updateListItemAlias($event)"
+              />
+              <span class="block text-[10px] text-slate-400">Im Item-Template über $alias.feldname ansprechbar, z. B. {{ '$' + selectedListItemAlias() + '.title' }}</span>
+            </label>
+            <label class="block space-y-1.5 text-xs text-slate-600">
+              <span class="font-medium">Filter (optional, JSON)</span>
+              <textarea
+                #listFilterInput
+                class="h-20 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-indigo-400"
+                placeholder='{"projectId": "$selectedProjectId"}'
+                [ngModel]="selectedListFilterJson()"
+              ></textarea>
+              <button
+                type="button"
+                class="rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white"
+                (click)="applyListFilter(listFilterInput.value)"
+              >Filter übernehmen</button>
+            </label>
+
+            <h4 class="text-[10px] font-semibold uppercase tracking-wider text-indigo-700">Item-Template</h4>
+            <p class="text-[10px] text-slate-500">Wird für jeden Datensatz einmal gerendert.</p>
+            <div class="grid grid-cols-3 gap-1">
+              @for (element of elements; track element.name) {
+                <button
+                  type="button"
+                  class="rounded-md border border-slate-200 px-1.5 py-1 text-[10px] text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"
+                  (click)="addElementToSelectedList(element)"
+                >{{ element.title }}</button>
+              }
+            </div>
+          </section>
+        }
 
         <section class="space-y-3">
           <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">

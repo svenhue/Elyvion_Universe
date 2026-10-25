@@ -11,8 +11,8 @@ export class ComponentNode {
   @Prop({ required: true })
   id!: string;
 
-  @Prop({ enum: ['component', 'element', 'text'] })
-  type?: 'component' | 'element' | 'text';
+  @Prop({ enum: ['component', 'element', 'text', 'list'] })
+  type?: 'component' | 'element' | 'text' | 'list';
 
   @Prop()
   name?: string;

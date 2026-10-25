@@ -14,6 +14,7 @@ import { UI_ELEMENT_CATALOG, UiElementDefinition } from './ui-element-catalog';
 import { ElvVariableAutocompleteDirective } from '../ui/variable-autocomplete.directive';
 import { AppOntologySyncService } from '../application-runner/ontology-sync.service';
 import { FrontendActionsService } from '../actions/frontend-actions.service';
+import { DataEngineApiService } from '../data-engine/data-engine-api.service';
 
 const EMPTY_SCHEMA: DynamicAppSchema = {
   id: 'default',
@@ -106,6 +107,14 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   readonly selectedEvents = computed<[string, EventAction[]][]>(
     () => Object.entries(this.selectedNode()?.events ?? {}),
   );
+  readonly selectedListDataSource = computed(
+    () => this.selectedNode()?.attributes?.['dataSource'] as { entity?: string; filter?: Record<string, unknown> } | undefined,
+  );
+  readonly selectedListItemAlias = computed(() => (this.selectedNode()?.attributes?.['itemAlias'] as string | undefined) ?? 'item');
+  readonly selectedListFilterJson = computed(() => {
+    const filter = this.selectedListDataSource()?.filter;
+    return filter ? JSON.stringify(filter, null, 2) : '';
+  });
 
   readonly newHandlerEvent = signal('click');
   readonly newHandlerActionType = signal<EventActionType>('set-variable');
@@ -138,6 +147,8 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClientService);
   private readonly ontologySync = inject(AppOntologySyncService);
   private readonly frontendActions = inject(FrontendActionsService);
+  private readonly dataEngineApi = inject(DataEngineApiService);
+  readonly availableEntities = signal<string[]>([]);
   private readonly saveRequests = new Subject<DynamicAppSchema>();
   private readonly historyRequests = new Subject<string>();
   private readonly previewRequests = new Subject<PreviewRequest>();
@@ -196,6 +207,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.dataEngineApi.listEntities().subscribe({ next: (entities) => this.availableEntities.set(entities.map((e) => e.name)) });
     const subject = this.auth.claims()?.['sub'];
     const userId = typeof subject === 'string' && subject.length ? subject : 'anonymous';
     this.dynamicAppService.loadApplication({ applicationId: this.applicationId, userId }).subscribe({
@@ -545,6 +557,74 @@ export class ProCodeComponent implements OnInit, OnDestroy {
     this.selectedId.set(id);
   }
 
+  /** "Liste" has no place in the drag-from-palette flow (every palette entry is a registered Angular component — see `insertElement` — a `list` node is a native renderer case, not one), so it gets its own button. */
+  addListNode(): void {
+    if (this.saveStatus() === 'loading') return;
+    const schema = this.parseSchema();
+    const root = schema?.components.find((node) => node.id === schema.rootComponentId);
+    if (!schema || !root) return;
+    const id = `list-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    schema.components.push({
+      id,
+      type: 'list',
+      attributes: { dataSource: { entity: '' }, itemAlias: 'item' },
+      position: { x: 0, y: 0, order: 0 },
+      children: [],
+    });
+    root.children = [...(root.children ?? []), id];
+    this.reorderChildren(schema, id);
+    this.selectedId.set(id);
+    this.writeSchema(schema);
+  }
+
+  /** Adds a palette element as a child of the selected `list` node (its item template) instead of the root — the only other insertion target this editor supports. */
+  addElementToSelectedList(element: UiElementDefinition): void {
+    if (this.saveStatus() === 'loading') return;
+    const parentId = this.selectedId();
+    const schema = this.parseSchema();
+    const parent = schema?.components.find((node) => node.id === parentId);
+    if (!schema || !parent || parent.type !== 'list') return;
+    const id = `${element.name}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    schema.components.push({
+      id,
+      type: 'component',
+      name: element.name,
+      attributes: { properties: defaultProperties(element.name) },
+      position: { x: 0, y: 0, order: (parent.children?.length ?? 0) + 1 },
+      children: [],
+    });
+    parent.children = [...(parent.children ?? []), id];
+    this.writeSchema(schema);
+  }
+
+  updateListEntity(entity: string): void {
+    this.updateSelectedNode((node) => {
+      const dataSource = (node.attributes?.['dataSource'] as Record<string, unknown>) ?? {};
+      node.attributes = { ...node.attributes, dataSource: { ...dataSource, entity } };
+    });
+  }
+
+  updateListItemAlias(itemAlias: string): void {
+    this.updateSelectedNode((node) => {
+      node.attributes = { ...node.attributes, itemAlias };
+    });
+  }
+
+  /** Applied on submit, not per keystroke — same "tolerate transient invalid JSON while typing" pattern as Rules-Engine's blocks editor. */
+  applyListFilter(filterJson: string): void {
+    let filter: unknown;
+    try {
+      filter = filterJson.trim() ? JSON.parse(filterJson) : undefined;
+    } catch {
+      this.schemaError.set('Der Filter ist kein gültiges JSON.');
+      return;
+    }
+    this.updateSelectedNode((node) => {
+      const dataSource = (node.attributes?.['dataSource'] as Record<string, unknown>) ?? {};
+      node.attributes = { ...node.attributes, dataSource: { ...dataSource, filter } };
+    });
+  }
+
   removeElement(id: string): void {
     if (id === this.previewSchema().rootComponentId) {
       return;
@@ -664,6 +744,9 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   titleFor(node: ConfiguredElement | DynamicComponentNode | null): string {
     if (!node) {
       return 'Element';
+    }
+    if ('type' in node && node.type === 'list') {
+      return 'Liste';
     }
     return this.elements.find((element) => element.name === node.name)?.title ?? node.element ?? node.name ?? 'Text';
   }
@@ -898,7 +981,7 @@ function isDynamicAppSchema(value: unknown): value is DynamicAppSchema {
       node !== null &&
       'id' in node &&
       typeof node.id === 'string' &&
-      (!('type' in node) || ['component', 'element', 'text'].includes(String(node.type))) &&
+      (!('type' in node) || ['component', 'element', 'text', 'list'].includes(String(node.type))) &&
       (!('children' in node) || (Array.isArray(node.children) && node.children.every((id) => typeof id === 'string'))),
   ) && value.components.some((node: DynamicComponentNode) => node.id === value.rootComponentId);
 }

@@ -11,7 +11,7 @@ export type ResolveSchemaRequest = z.infer<typeof resolveSchemaRequestSchema>;
 const componentNodeSchema = z
   .object({
     id: z.string().min(1),
-    type: z.enum(['component', 'element', 'text']).optional(),
+    type: z.enum(['component', 'element', 'text', 'list']).optional(),
     name: z.string().min(1).optional(),
     element: z.string().min(1).optional(),
     text: z.string().optional(),

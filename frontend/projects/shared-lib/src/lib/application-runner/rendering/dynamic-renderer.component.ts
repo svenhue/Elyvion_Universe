@@ -17,11 +17,19 @@ import {
   Type,
   ViewRef,
 } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { DYNAMIC_COMPONENT_REGISTRY } from '../registry/dynamic-component-registry';
-import { DynamicAppSchema, DynamicComponentNode, isAbsolutelyPositioned } from '../schema/dynamic-app-schema';
+import {
+  DynamicAppSchema,
+  DynamicComponentNode,
+  isAbsolutelyPositioned,
+  listDataSourceOf,
+  listItemAliasOf,
+} from '../schema/dynamic-app-schema';
 import { EventAction } from '../schema/event-action';
 import { AppStateService } from '../state/app-state.service';
 import { parseVariableReference } from '../state/app-variable';
+import { DataEngineApiService } from '../../data-engine/data-engine-api.service';
 import { WorkflowApiService } from '../../workflow/workflow-api.service';
 import { WorkflowRunnerService } from '../../workflow/workflow-runner.service';
 
@@ -32,6 +40,8 @@ interface RenderSession {
   /** Node id → its ComponentRef, for `control-component` actions and `trigger-event` lookups. */
   nodesById: Map<string, DynamicComponentNode>;
   componentRefsById: Map<string, ComponentRef<unknown>>;
+  /** Per-item `AppStateService` variables a `list` node created for this render pass — torn down with the rest of the session, see `renderListNode`. */
+  transientVariableNames: string[];
 }
 
 export interface DynamicElementDrop {
@@ -71,6 +81,7 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
   private readonly appState = inject(AppStateService);
   private readonly workflowApi = inject(WorkflowApiService);
   private readonly workflowRunner = inject(WorkflowRunnerService);
+  private readonly dataEngineApi = inject(DataEngineApiService);
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement;
   private activeSession?: RenderSession;
   private renderVersion = 0;
@@ -86,6 +97,7 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
       effects: [],
       nodesById: nodes,
       componentRefsById: new Map(),
+      transientVariableNames: [],
     };
     const rootId = this.componentId ?? this.schema.rootComponentId;
     const root = nodes.get(rootId);
@@ -126,6 +138,16 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
 
     const path = new Set(ancestors);
     path.add(node.id);
+
+    const type = node.type ?? (node.name ? 'component' : node.element ? 'element' : 'text');
+
+    // Handled entirely separately — a `list` node's `children` are a
+    // *template*, rendered once per fetched record (see `renderListNode`),
+    // not once like every other node type's children below.
+    if (type === 'list') {
+      return this.renderListNode(node, nodes, session, path, ancestors.size === 0);
+    }
+
     const children: Node[] = [];
     const childIds = [...(node.children ?? [])].sort((leftId, rightId) => {
       const left = nodes.get(leftId)?.position?.order;
@@ -144,7 +166,6 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
       }
     }
 
-    const type = node.type ?? (node.name ? 'component' : node.element ? 'element' : 'text');
     if (type === 'text') {
       return this.document.createTextNode(node.text ?? '');
     }
@@ -223,6 +244,102 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
     componentRef.changeDetectorRef.detectChanges();
 
     return hostElement;
+  }
+
+  /**
+   * "Eine Liste von Datensätzen, einmal pro Treffer gerendert" — fetches
+   * `attributes.dataSource.entity` from `data-engine` (optionally filtered;
+   * filter values may be `$variable` references, resolved like any other
+   * attribute) and renders this node's `children` once per record, each
+   * time with `attributes.itemAlias` (default `"item"`) bound to that
+   * record's fields as `$alias.fieldName`.
+   *
+   * Not reactive to the underlying data changing elsewhere — fetched once
+   * per render pass, same as every other external read in this renderer
+   * (an http-request action's result isn't live either). Node ids are
+   * reused verbatim across item instances (so clicking a rendered item in
+   * the pro-code canvas still resolves back to the one real template node
+   * for editing) — the consequence is that `control-component`/
+   * `trigger-event` targeting a node inside a list only ever reaches the
+   * *last* rendered item, a known limitation for this first version.
+   */
+  private async renderListNode(
+    node: DynamicComponentNode,
+    nodes: Map<string, DynamicComponentNode>,
+    session: RenderSession,
+    path: Set<string>,
+    isApplicationRoot: boolean,
+  ): Promise<Node | null> {
+    const dataSource = listDataSourceOf(node);
+    if (!dataSource?.entity) {
+      console.warn(`[DynamicRenderer] list node "${node.id}" has no attributes.dataSource.entity`);
+      return null;
+    }
+    const itemAlias = listItemAliasOf(node);
+
+    const container = this.document.createElement('div');
+    this.prepareNodeElement(container, node, isApplicationRoot, path.size === 2);
+    if (isApplicationRoot) {
+      this.prepareApplicationRoot(container);
+    }
+    this.applyStyle(container, (node.attributes?.['style'] as Record<string, unknown>) ?? {});
+    if (typeof node.attributes?.['class'] === 'string') {
+      container.className = node.attributes['class'] as string;
+    }
+
+    let records: Record<string, unknown>[] = [];
+    try {
+      const resolvedFilter = dataSource.filter ? (this.resolveVariables(dataSource.filter) as Record<string, unknown>) : undefined;
+      const stringFilter = resolvedFilter
+        ? Object.fromEntries(Object.entries(resolvedFilter).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+        : undefined;
+      records = await firstValueFrom(this.dataEngineApi.listRecords(dataSource.entity, stringFilter));
+    } catch (error) {
+      console.warn(`[DynamicRenderer] list node "${node.id}" could not load "${dataSource.entity}":`, error);
+      return container;
+    }
+
+    const templateIds = [...(node.children ?? [])].sort((leftId, rightId) => {
+      const left = nodes.get(leftId)?.position?.order;
+      const right = nodes.get(rightId)?.position?.order;
+      return (left ?? Number.MAX_SAFE_INTEGER) - (right ?? Number.MAX_SAFE_INTEGER);
+    });
+
+    for (let index = 0; index < records.length; index++) {
+      const record = records[index];
+      const mangledAlias = `__list_${node.id}_${index}`;
+      this.setTransientVariable(session, mangledAlias, record);
+      for (const [fieldName, fieldValue] of Object.entries(record)) {
+        this.setTransientVariable(session, `${mangledAlias}.${fieldName}`, fieldValue);
+      }
+
+      const itemNodes = new Map(nodes);
+      for (const templateId of collectSubtreeIds(templateIds, nodes)) {
+        const original = nodes.get(templateId);
+        if (!original) continue;
+        itemNodes.set(templateId, {
+          ...original,
+          attributes: original.attributes ? (rewriteAliasReferences(original.attributes, itemAlias, mangledAlias) as Record<string, unknown>) : original.attributes,
+          text: original.text !== undefined ? (rewriteAliasReferences(original.text, itemAlias, mangledAlias) as string) : original.text,
+        });
+      }
+
+      const itemWrapper = this.document.createElement('div');
+      itemWrapper.dataset['elvListItem'] = String(index);
+      for (const templateId of templateIds) {
+        const renderedNode = await this.renderNode(itemNodes.get(templateId)!, itemNodes, session, path);
+        if (renderedNode) itemWrapper.appendChild(renderedNode);
+      }
+      container.appendChild(itemWrapper);
+    }
+
+    return container;
+  }
+
+  /** Registers an ad-hoc global variable for the duration of this render pass only — `destroySession` removes everything tracked here, so repeated schema edits don't leak a growing pile of per-item variables. */
+  private setTransientVariable(session: RenderSession, name: string, value: unknown): void {
+    this.appState.setVariable(name, typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'json', value);
+    session.transientVariableNames.push(name);
   }
 
   private prepareApplicationRoot(element: HTMLElement): void {
@@ -606,5 +723,45 @@ export class DynamicRendererComponent implements OnChanges, OnDestroy {
     for (const componentRef of session.componentRefs) {
       componentRef.destroy();
     }
+    for (const name of session.transientVariableNames) {
+      this.appState.removeVariable(name);
+    }
   }
+}
+
+/** Every node id reachable from `rootIds` via `children` — the whole template subtree a `list` node clones once per record. */
+function collectSubtreeIds(rootIds: string[], nodes: Map<string, DynamicComponentNode>): string[] {
+  const seen = new Set<string>();
+  const stack = [...rootIds];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const node = nodes.get(id);
+    if (node?.children) stack.push(...node.children);
+  }
+  return [...seen];
+}
+
+/**
+ * Replaces a `"$alias"` or `"$alias.field"` string (and the same inside
+ * nested arrays/objects) with `"$mangledAlias"`/`"$mangledAlias.field"` —
+ * everything else is left untouched. Used to make a `list` node's item
+ * template's `$itemAlias.*` references point at the per-instance variables
+ * `renderListNode` sets up for one specific record.
+ */
+function rewriteAliasReferences(value: unknown, alias: string, mangledAlias: string): unknown {
+  if (typeof value === 'string' && value.startsWith('$')) {
+    const ref = value.slice(1);
+    if (ref === alias) return `$${mangledAlias}`;
+    if (ref.startsWith(`${alias}.`)) return `$${mangledAlias}${ref.slice(alias.length)}`;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteAliasReferences(item, alias, mangledAlias));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, rewriteAliasReferences(item, alias, mangledAlias)]));
+  }
+  return value;
 }

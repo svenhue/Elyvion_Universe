@@ -48,10 +48,13 @@
             [ngModel]="field.type"
             (ngModelChange)="updateFieldRow($index, { type: $event })"
           >
-            <option value="string">Text</option>
+            <option value="string">Text (kurz)</option>
+            <option value="text">Text (lang)</option>
             <option value="number">Zahl</option>
             <option value="boolean">Ja/Nein</option>
             <option value="date">Datum</option>
+            <option value="enum">Feste Werte</option>
+            <option value="reference">Verweis auf Entität</option>
           </select>
           <label class="flex items-center gap-0.5 text-[9px] text-slate-500" title="Pflichtfeld">
             <input type="checkbox" [ngModel]="field.required" (ngModelChange)="updateFieldRow($index, { required: $event })" />
@@ -59,6 +62,22 @@
           </label>
           <button type="button" class="text-slate-300 hover:text-rose-600" (click)="removeFieldRow($index)">×</button>
         </div>
+        @if (field.type === 'enum') {
+          <input
+            class="w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
+            placeholder="Werte, kommagetrennt (z. B. Offen, In Arbeit, Erledigt)"
+            [ngModel]="field.optionsText"
+            (ngModelChange)="updateFieldRow($index, { optionsText: $event })"
+          />
+        }
+        @if (field.type === 'reference') {
+          <input
+            class="w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
+            placeholder="Ziel-Entität (Name, z. B. Projekt)"
+            [ngModel]="field.referenceEntity"
+            (ngModelChange)="updateFieldRow($index, { referenceEntity: $event })"
+          />
+        }
       }
       <button type="button" class="text-[10px] text-indigo-600 hover:text-indigo-800" (click)="addFieldRow()">+ Feld</button>
 
@@ -102,10 +121,28 @@
                       <option value="true">Ja</option>
                       <option value="false">Nein</option>
                     </select>
+                  } @else if (field.type === 'enum') {
+                    <select
+                      class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateRecordField(field.name, $event)"
+                    >
+                      <option value="">—</option>
+                      @for (option of field.options; track option) {
+                        <option [value]="option">{{ option }}</option>
+                      }
+                    </select>
+                  } @else if (field.type === 'text') {
+                    <textarea
+                      class="h-20 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateRecordField(field.name, $event)"
+                    ></textarea>
                   } @else {
                     <input
                       [type]="field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'"
                       class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                      [placeholder]="field.type === 'reference' ? 'Id des verwiesenen Datensatzes' : ''"
                       [ngModel]="field.value"
                       (ngModelChange)="updateRecordField(field.name, $event)"
                     />

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
 import { DataService } from './data.service';
 
@@ -7,8 +7,8 @@ export class DataController {
   constructor(private readonly data: DataService) {}
 
   @Get(':entity')
-  async list(@Param('entity') entity: string) {
-    return envelope(await this.data.list(entity));
+  async list(@Param('entity') entity: string, @Query() filter: Record<string, string>) {
+    return envelope(await this.data.list(entity, filter));
   }
 
   @Post(':entity')

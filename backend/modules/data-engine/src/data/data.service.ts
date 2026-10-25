@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityRegistryService } from '../entities/entity-registry.service';
-import { buildRecordSchema } from '../entities/schema-builder';
+import { buildRecordSchema, coerceFilterValue } from '../entities/schema-builder';
 
 export type DataRecord = Record<string, unknown>;
 
@@ -16,9 +16,23 @@ export type DataRecord = Record<string, unknown>;
 export class DataService {
   constructor(private readonly registry: EntityRegistryService) {}
 
-  async list(entityName: string): Promise<DataRecord[]> {
+  /** `filter` is a raw query-string map (e.g. `?status=Done&projectId=p1`) — unknown keys are ignored rather than rejected, since a caller may pass through unrelated query params. */
+  async list(entityName: string, filter?: Record<string, string>): Promise<DataRecord[]> {
     const model = await this.registry.getDataModel(entityName);
-    return (await model.find().lean()).map(toDataRecord);
+    const query = filter && Object.keys(filter).length ? await this.buildFilterQuery(entityName, filter) : {};
+    return (await model.find(query).lean()).map(toDataRecord);
+  }
+
+  private async buildFilterQuery(entityName: string, filter: Record<string, string>): Promise<Record<string, unknown>> {
+    const fields = await this.registry.getFields(entityName);
+    const byName = new Map(fields.map((field) => [field.name, field]));
+    const query: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(filter)) {
+      const field = byName.get(key);
+      if (!field) continue;
+      query[key] = coerceFilterValue(field.type, value);
+    }
+    return query;
   }
 
   async get(entityName: string, id: string): Promise<DataRecord> {

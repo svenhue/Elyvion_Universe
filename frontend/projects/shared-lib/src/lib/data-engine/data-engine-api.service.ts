@@ -26,9 +26,10 @@ export class DataEngineApiService {
     return this.api.delete(DataEngineApiService.MODULE, `/entities/${name}`).pipe(map(() => undefined));
   }
 
-  listRecords(entity: string): Observable<DataRecord[]> {
+  listRecords(entity: string, filter?: Record<string, string>): Observable<DataRecord[]> {
+    const query = filter && Object.keys(filter).length ? `?${new URLSearchParams(filter).toString()}` : '';
     return this.api
-      .get<DataRecord[]>(DataEngineApiService.MODULE, `/data/${entity}`)
+      .get<DataRecord[]>(DataEngineApiService.MODULE, `/data/${entity}${query}`)
       .pipe(map((response) => response.data));
   }
 

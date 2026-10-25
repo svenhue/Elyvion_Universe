@@ -3,12 +3,16 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DataEngineApiService } from './data-engine-api.service';
-import { DataRecord, EntityDefinition, FieldType } from './data-engine-schema';
+import { DataRecord, EntityDefinition, FIELD_TYPES, FieldType } from './data-engine-schema';
 
 interface NewFieldDraft {
   name: string;
   type: FieldType;
   required: boolean;
+  /** `enum` only — comma-separated, same loose-then-coerce pattern as e.g. the workflow builder's id lists. */
+  optionsText: string;
+  /** `reference` only. */
+  referenceEntity: string;
 }
 
 /** A record's field value mid-edit — always a string in the form, coerced to the field's real type on submit, same loose-then-coerce pattern the rest of this project's dynamic forms (workflow steps, actions) use. */
@@ -16,6 +20,8 @@ interface RecordFieldDraft {
   name: string;
   type: FieldType;
   value: string;
+  /** `enum` only — carried through so the form can render a select with the right choices. */
+  options?: string[];
 }
 
 /**
@@ -39,8 +45,9 @@ export class DataEngineComponent implements OnInit {
   readonly records = signal<DataRecord[]>([]);
   readonly loadError = signal('');
 
+  readonly fieldTypes = FIELD_TYPES;
   readonly newEntityName = signal('');
-  readonly newFields = signal<NewFieldDraft[]>([{ name: '', type: 'string', required: false }]);
+  readonly newFields = signal<NewFieldDraft[]>([blankFieldDraft()]);
   readonly creatingEntity = signal(false);
 
   readonly recordForm = signal<RecordFieldDraft[] | null>(null);
@@ -85,7 +92,7 @@ export class DataEngineComponent implements OnInit {
   // --- Entity definition ---
 
   addFieldRow(): void {
-    this.newFields.update((fields) => [...fields, { name: '', type: 'string', required: false }]);
+    this.newFields.update((fields) => [...fields, blankFieldDraft()]);
   }
 
   removeFieldRow(index: number): void {
@@ -104,10 +111,22 @@ export class DataEngineComponent implements OnInit {
     this.loadError.set('');
     try {
       const created = await firstValueFrom(
-        this.dataApi.createEntity({ name, fields: fields.map((field) => ({ ...field, name: field.name.trim() })) }),
+        this.dataApi.createEntity({
+          name,
+          fields: fields.map((field) => ({
+            name: field.name.trim(),
+            type: field.type,
+            required: field.required,
+            options:
+              field.type === 'enum'
+                ? field.optionsText.split(',').map((o) => o.trim()).filter(Boolean)
+                : undefined,
+            referenceEntity: field.type === 'reference' ? field.referenceEntity.trim() || undefined : undefined,
+          })),
+        }),
       );
       this.newEntityName.set('');
-      this.newFields.set([{ name: '', type: 'string', required: false }]);
+      this.newFields.set([blankFieldDraft()]);
       this.entities.update((entities) => [...entities, created]);
       this.selectEntity(created);
     } catch (error) {
@@ -132,7 +151,7 @@ export class DataEngineComponent implements OnInit {
     const entity = this.selectedEntity();
     if (!entity) return;
     this.editingRecordId.set(null);
-    this.recordForm.set(entity.fields.map((field) => ({ name: field.name, type: field.type, value: '' })));
+    this.recordForm.set(entity.fields.map((field) => ({ name: field.name, type: field.type, value: '', options: field.options })));
   }
 
   openEditRecordForm(record: DataRecord): void {
@@ -140,7 +159,12 @@ export class DataEngineComponent implements OnInit {
     if (!entity) return;
     this.editingRecordId.set(record.id);
     this.recordForm.set(
-      entity.fields.map((field) => ({ name: field.name, type: field.type, value: stringify(record[field.name]) })),
+      entity.fields.map((field) => ({
+        name: field.name,
+        type: field.type,
+        value: stringify(record[field.name]),
+        options: field.options,
+      })),
     );
   }
 
@@ -186,6 +210,10 @@ export class DataEngineComponent implements OnInit {
     await firstValueFrom(this.dataApi.deleteRecord(entity.name, id));
     this.records.update((records) => records.filter((record) => record.id !== id));
   }
+}
+
+function blankFieldDraft(): NewFieldDraft {
+  return { name: '', type: 'string', required: false, optionsText: '', referenceEntity: '' };
 }
 
 function coerceField(field: RecordFieldDraft): unknown {
