@@ -16,10 +16,22 @@ export const routes: Routes = [
         { path: '', component: HomeComponent },
         {
           path: 'pro-code',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.AppsOverviewComponent),
+        },
+        {
+          path: 'pro-code/:applicationId',
           loadComponent: () => import('@elyvion/shared-lib').then((module) => module.ProCodeComponent),
         },
         {
           path: 'workflows',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.WorkflowsOverviewComponent),
+        },
+        {
+          path: 'workflows/builder',
+          loadComponent: () => import('@elyvion/shared-lib').then((module) => module.WorkflowBuilderComponent),
+        },
+        {
+          path: 'workflows/builder/:key',
           loadComponent: () => import('@elyvion/shared-lib').then((module) => module.WorkflowBuilderComponent),
         },
         {

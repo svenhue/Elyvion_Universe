@@ -1,7 +1,7 @@
 import { JsonPipe } from '@angular/common';
 import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ActionDescriptor } from '../actions/action-schema';
 import { ActionsApiService } from '../actions/actions-api.service';
@@ -292,6 +292,7 @@ export class WorkflowBuilderComponent implements OnInit {
   private readonly workflowApi = inject(WorkflowApiService);
   private readonly workflowRunner = inject(WorkflowRunnerService);
   private readonly actionsApi = inject(ActionsApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly canvasRef = viewChild<ElementRef<HTMLElement>>('canvasEl');
 
   readonly workflows = signal<WorkflowDefinitionRecord[]>([]);
@@ -353,9 +354,20 @@ export class WorkflowBuilderComponent implements OnInit {
     this.actionsApi.list().subscribe({ next: (actions) => this.availableActions.set(actions) });
   }
 
+  /** `/workflows/builder/:key` (via `linkFor('workflow', …)`, or the overview page's own links) opens that workflow directly instead of landing on a blank new one. */
+  private openFromRoute(): void {
+    const key = this.route.snapshot.paramMap.get('key');
+    if (!key) return;
+    const record = this.workflows().find((w) => w.key === key);
+    if (record) this.editWorkflow(record);
+  }
+
   loadWorkflows(): void {
     this.workflowApi.list().subscribe({
-      next: (records) => this.workflows.set(records),
+      next: (records) => {
+        this.workflows.set(records);
+        this.openFromRoute();
+      },
       error: (error: unknown) => this.loadError.set(errorMessage(error, 'Workflows konnten nicht geladen werden.')),
     });
   }

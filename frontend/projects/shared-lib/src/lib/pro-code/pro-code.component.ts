@@ -1,6 +1,6 @@
 import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { EMPTY, Subject, catchError, debounceTime, map, switchMap } from 'rxjs';
 import { ApiClientService, ResponseEnvelope } from '../api/api-client.service';
 import { AuthService } from '../auth/auth.service';
@@ -130,6 +130,9 @@ export class ProCodeComponent implements OnInit, OnDestroy {
 
   readonly ontologySyncEnabled = signal(false);
 
+  /** Which `app-config` document this editor instance works on — from the `/pro-code/:applicationId` route, since the overview page is what lets you pick or create one. */
+  readonly applicationId = inject(ActivatedRoute).snapshot.paramMap.get('applicationId') ?? 'default';
+
   private readonly auth = inject(AuthService);
   private readonly dynamicAppService = inject(DynamicAppService);
   private readonly api = inject(ApiClientService);
@@ -165,14 +168,14 @@ export class ProCodeComponent implements OnInit, OnDestroy {
           this.saveStatus.set('saving');
           this.saveError.set('');
           const body: SaveRequest = {
-            applicationId: 'default',
+            applicationId: this.applicationId,
             name: schema.name,
             version: schema.version,
             rootComponentId: schema.rootComponentId,
             components: schema.components,
             ontologySyncEnabled: this.ontologySyncEnabled(),
           };
-          return this.api.put<DynamicAppSchema>('app-config', '/configs/default', body).pipe(
+          return this.api.put<DynamicAppSchema>('app-config', `/configs/${this.applicationId}`, body).pipe(
             map((response: ResponseEnvelope<DynamicAppSchema>) => response.data),
             catchError((error: unknown) => {
               this.saveStatus.set('error');
@@ -185,7 +188,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
       .subscribe((saved) => {
         this.saveStatus.set('saved');
         if (this.ontologySyncEnabled()) {
-          this.ontologySync.sync('default', saved).catch((error: unknown) => {
+          this.ontologySync.sync(this.applicationId, saved).catch((error: unknown) => {
             console.error('[ProCode] Ontologie-Sync fehlgeschlagen:', error);
           });
         }
@@ -195,7 +198,7 @@ export class ProCodeComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const subject = this.auth.claims()?.['sub'];
     const userId = typeof subject === 'string' && subject.length ? subject : 'anonymous';
-    this.dynamicAppService.loadApplication({ applicationId: 'default', userId }).subscribe({
+    this.dynamicAppService.loadApplication({ applicationId: this.applicationId, userId }).subscribe({
       next: (schema) => {
         const normalized = normalizeSchema(schema);
         this.loadError.set('');

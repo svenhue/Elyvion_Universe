@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { RepositoriesApiService } from '../repository/repositories-api.service';
 import { RepositoryCopyRef } from '../repository/repository-schema';
@@ -25,6 +25,7 @@ import { RULE_BLOCK_TYPES, Rule, RuleBlockType, defaultBlockFor } from './rules-
 export class RulesEngineComponent implements OnInit {
   private readonly api = inject(RulesEngineApiService);
   private readonly repositoriesApi = inject(RepositoriesApiService);
+  private readonly route = inject(ActivatedRoute);
 
   /** Copies (in some Repository) of the currently-saved rule, offered right after a successful save — "wird gefragt, ob das in dem anderen Repository auch geupdatet werden soll." */
   readonly pendingCopyUpdates = signal<RepositoryCopyRef[]>([]);
@@ -55,9 +56,14 @@ export class RulesEngineComponent implements OnInit {
     this.reload();
   }
 
+  /** Deep-links from a Solution/Repository member's "Doppelklick zum Öffnen" — `linkFor('rule', …)` lands here with `?open=<key>`. */
   private reload(): void {
+    const openKey = this.route.snapshot.queryParamMap.get('open');
     this.api.list().subscribe({
-      next: (rules) => this.rules.set(rules),
+      next: (rules) => {
+        this.rules.set(rules);
+        if (openKey && rules.some((r) => r.key === openKey)) this.select(openKey);
+      },
       error: () => this.loadError.set('Regeln konnten nicht geladen werden.'),
     });
   }

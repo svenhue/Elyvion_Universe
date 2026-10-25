@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { AgentApiService } from '../agent-engine/agent-api.service';
@@ -59,6 +59,7 @@ export class RepositoryComponent implements OnInit {
   private readonly rulesApi = inject(RulesEngineApiService);
   private readonly solutionsApi = inject(SolutionsApiService);
   private readonly repositoriesApi = inject(RepositoriesApiService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly KERN = KERN;
   readonly itemTypes = REPOSITORY_ITEM_TYPES;
@@ -117,8 +118,15 @@ export class RepositoryComponent implements OnInit {
     this.reloadKern();
   }
 
+  /** Deep-links from a Solution member's "Doppelklick zum Öffnen" — `linkFor('repository', …)` lands here with `?open=<key>`. */
   private reloadRepositories(): void {
-    this.repositoriesApi.list().subscribe({ next: (repositories) => this.repositories.set(repositories) });
+    const openKey = this.route.snapshot.queryParamMap.get('open');
+    this.repositoriesApi.list().subscribe({
+      next: (repositories) => {
+        this.repositories.set(repositories);
+        if (openKey && repositories.some((r) => r.key === openKey)) this.selectScope(openKey);
+      },
+    });
   }
 
   private reloadKern(): void {

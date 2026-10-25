@@ -50,6 +50,7 @@ export * from './lib/workflow/workflow-schema';
 export * from './lib/workflow/workflow-runner.service';
 export * from './lib/workflow/workflow-api.service';
 export * from './lib/workflow/workflow-builder.component';
+export * from './lib/workflow/workflows-overview.component';
 
 export * from './lib/auth-pages/auth.guard';
 export * from './lib/auth-pages/login-page.component';
@@ -66,6 +67,8 @@ export * from './lib/admin/admin-routes';
 
 export * from './lib/pro-code/ui-element-catalog';
 export * from './lib/pro-code/pro-code.component';
+export * from './lib/pro-code/apps-overview.component';
+export * from './lib/application-runner/service/app-config-api.service';
 
 export * from './lib/ontology-engine/ontology-schema';
 export * from './lib/ontology-engine/ontology-api.service';
@@ -133,5 +136,8 @@ export * from './lib/rules-engine/rules-engine.nav';
 export * from './lib/repository/resource-type';
 export * from './lib/repository/repository-schema';
 export * from './lib/repository/repositories-api.service';
+export * from './lib/repository/resource-options.service';
+export * from './lib/repository/resource-link';
+export * from './lib/repository/group-by-solution';
 export * from './lib/repository/repository.component';
 export * from './lib/repository/repository.nav';

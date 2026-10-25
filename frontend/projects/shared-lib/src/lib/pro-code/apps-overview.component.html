@@ -1,0 +1,59 @@
+<main class="h-full w-full overflow-y-auto bg-white p-6 font-sans text-slate-900">
+  <div class="mb-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <a routerLink="/" class="grid size-8 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white">E</a>
+      <h1 class="text-lg font-semibold">Apps</h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <input
+        class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+        placeholder="Neue App — Id (z. B. kunden-portal)"
+        [ngModel]="newAppId()"
+        (ngModelChange)="newAppId.set($event)"
+      />
+      <button type="button" class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white" (click)="createNew()">
+        + Neue App
+      </button>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <p class="text-xs text-slate-400">Lade…</p>
+  } @else {
+    @for (group of grouped().groups; track group.solution._id) {
+      <section class="mb-6">
+        <h2 class="mb-2 text-sm font-medium text-slate-700">{{ group.solution.name }}</h2>
+        <div class="grid grid-cols-2 gap-2 md:grid-cols-3">
+          @for (app of group.items; track app.applicationId) {
+            <button
+              type="button"
+              (click)="open(app.applicationId)"
+              class="rounded-md border border-slate-200 p-3 text-left text-xs hover:border-indigo-300 hover:bg-indigo-50"
+            >
+              <p class="font-medium text-slate-800">{{ app.name }}</p>
+              <p class="text-slate-400">{{ app.applicationId }} · v{{ app.version }}</p>
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    <section>
+      <h2 class="mb-2 text-sm font-medium text-slate-700">Noch nicht in einer Lösung</h2>
+      <div class="grid grid-cols-2 gap-2 md:grid-cols-3">
+        @for (app of grouped().ungrouped; track app.applicationId) {
+          <button
+            type="button"
+            (click)="open(app.applicationId)"
+            class="rounded-md border border-slate-200 p-3 text-left text-xs hover:border-indigo-300 hover:bg-indigo-50"
+          >
+            <p class="font-medium text-slate-800">{{ app.name }}</p>
+            <p class="text-slate-400">{{ app.applicationId }} · v{{ app.version }}</p>
+          </button>
+        } @empty {
+          <p class="col-span-full text-xs text-slate-400">Keine Apps.</p>
+        }
+      </div>
+    </section>
+  }
+</main>

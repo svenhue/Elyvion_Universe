@@ -79,14 +79,18 @@
         </thead>
         <tbody>
           @for (member of solution.members; track member.resourceType + member.resourceKey) {
-            <tr class="border-b border-slate-100">
+            <tr
+              class="border-b border-slate-100 cursor-pointer"
+              title="Doppelklick zum Öffnen"
+              (dblclick)="openMember(member.resourceType, member.resourceKey)"
+            >
               <td class="py-2">
                 <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{{ member.resourceType }}</span>
               </td>
               <td class="py-2 font-mono text-slate-700">{{ member.resourceKey }}</td>
               <td class="py-2 text-slate-500">{{ member.label || '—' }}</td>
               <td class="py-2 text-right">
-                <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeMember(member.resourceType, member.resourceKey)">×</button>
+                <button type="button" class="text-slate-400 hover:text-rose-600" (click)="removeMember(member.resourceType, member.resourceKey); $event.stopPropagation()">×</button>
               </td>
             </tr>
           } @empty {
@@ -136,18 +140,31 @@
         <select
           class="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
           [ngModel]="newMemberType()"
-          (ngModelChange)="newMemberType.set($event)"
+          (ngModelChange)="setNewMemberType($event)"
         >
           @for (type of memberTypes; track type) {
             <option [value]="type">{{ type }}</option>
           }
         </select>
-        <input
-          class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
-          placeholder="Resource-Key (z. B. app-default, transport-demo)"
-          [ngModel]="newMemberKey()"
-          (ngModelChange)="newMemberKey.set($event)"
-        />
+        @if (newMemberOptions().length) {
+          <select
+            class="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+            [ngModel]="newMemberKey()"
+            (ngModelChange)="pickNewMember($event)"
+          >
+            <option value="" disabled>Ressource wählen…</option>
+            @for (option of newMemberOptions(); track option.key) {
+              <option [value]="option.key">{{ option.label }} ({{ option.key }})</option>
+            }
+          </select>
+        } @else {
+          <input
+            class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+            placeholder="Resource-Key (kein Katalog für diesen Typ)"
+            [ngModel]="newMemberKey()"
+            (ngModelChange)="newMemberKey.set($event)"
+          />
+        }
         <input
           class="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
           placeholder="Label (optional)"

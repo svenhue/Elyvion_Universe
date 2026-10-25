@@ -1,9 +1,11 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DeploymentEngineApiService } from '../deployment-engine/deployment-engine-api.service';
 import { Deployment, DeploymentTarget } from '../deployment-engine/deployment-engine-schema';
+import { ResourceOption, ResourceOptionsService } from '../repository/resource-options.service';
+import { linkFor } from '../repository/resource-link';
 import { SolutionsApiService } from './solutions-api.service';
 import { SOLUTION_MEMBER_TYPES, Solution, SolutionMemberType } from './solutions-schema';
 
@@ -23,6 +25,9 @@ import { SOLUTION_MEMBER_TYPES, Solution, SolutionMemberType } from './solutions
 export class SolutionsComponent implements OnInit {
   private readonly api = inject(SolutionsApiService);
   private readonly deploymentApi = inject(DeploymentEngineApiService);
+  private readonly resourceOptions = inject(ResourceOptionsService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly memberTypes = SOLUTION_MEMBER_TYPES;
   readonly solutions = signal<Solution[]>([]);
@@ -41,17 +46,47 @@ export class SolutionsComponent implements OnInit {
   readonly newMemberType = signal<SolutionMemberType>('application');
   readonly newMemberKey = signal('');
   readonly newMemberLabel = signal('');
+  readonly newMemberOptions = signal<ResourceOption[]>([]);
 
   readonly selectedSolution = computed(() => this.solutions().find((s) => s.key === this.selectedKey()) ?? null);
 
   ngOnInit(): void {
     this.reload();
     this.deploymentApi.listTargets().subscribe({ next: (targets) => this.targets.set(targets) });
+    this.loadMemberOptions();
   }
 
+  private loadMemberOptions(): void {
+    this.newMemberKey.set('');
+    this.resourceOptions.optionsFor(this.newMemberType()).subscribe({ next: (options) => this.newMemberOptions.set(options) });
+  }
+
+  setNewMemberType(type: SolutionMemberType): void {
+    this.newMemberType.set(type);
+    this.loadMemberOptions();
+  }
+
+  pickNewMember(resourceKey: string): void {
+    this.newMemberKey.set(resourceKey);
+    if (!this.newMemberLabel().trim()) {
+      this.newMemberLabel.set(this.newMemberOptions().find((o) => o.key === resourceKey)?.label ?? '');
+    }
+  }
+
+  openMember(resourceType: string, resourceKey: string): void {
+    const link = linkFor(resourceType as never, resourceKey);
+    if (!link) return;
+    this.router.navigate(link.commands, link.queryParams ? { queryParams: link.queryParams } : undefined);
+  }
+
+  /** Deep-links from a Repository member's "Doppelklick zum Öffnen" — `linkFor('solution', …)` lands here with `?open=<key>`. */
   private reload(): void {
+    const openKey = this.route.snapshot.queryParamMap.get('open');
     this.api.list().subscribe({
-      next: (solutions) => this.solutions.set(solutions),
+      next: (solutions) => {
+        this.solutions.set(solutions);
+        if (openKey && solutions.some((s) => s.key === openKey)) this.select(openKey);
+      },
       error: () => this.loadError.set('Lösungen konnten nicht geladen werden.'),
     });
   }

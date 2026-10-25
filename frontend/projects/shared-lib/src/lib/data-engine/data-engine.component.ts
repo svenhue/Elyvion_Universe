@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DataEngineApiService } from './data-engine-api.service';
 import { DataRecord, EntityDefinition, FieldType } from './data-engine-schema';
@@ -32,6 +32,7 @@ interface RecordFieldDraft {
 })
 export class DataEngineComponent implements OnInit {
   private readonly dataApi = inject(DataEngineApiService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly entities = signal<EntityDefinition[]>([]);
   readonly selectedEntityName = signal<string | null>(null);
@@ -54,9 +55,15 @@ export class DataEngineComponent implements OnInit {
     this.loadEntities();
   }
 
+  /** Deep-links from a Solution/Repository member's "Doppelklick zum Öffnen" — `linkFor('entity', …)` lands here with `?open=<name>`. */
   private loadEntities(): void {
+    const openName = this.route.snapshot.queryParamMap.get('open');
     this.dataApi.listEntities().subscribe({
-      next: (entities) => this.entities.set(entities),
+      next: (entities) => {
+        this.entities.set(entities);
+        const toOpen = openName ? entities.find((e) => e.name === openName) : undefined;
+        if (toOpen) this.selectEntity(toOpen);
+      },
       error: () => this.loadError.set('Entitäten konnten nicht geladen werden.'),
     });
   }
