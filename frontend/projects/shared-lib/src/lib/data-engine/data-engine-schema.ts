@@ -1,14 +1,37 @@
-export type FieldType = 'string' | 'number' | 'boolean' | 'date' | 'text' | 'enum' | 'reference';
-export const FIELD_TYPES: FieldType[] = ['string', 'number', 'boolean', 'date', 'text', 'enum', 'reference'];
+export type FieldType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'text'
+  | 'enum'
+  | 'reference'
+  | 'multi_enum'
+  | 'multi_reference'
+  | 'file';
+export const FIELD_TYPES: FieldType[] = [
+  'string',
+  'number',
+  'boolean',
+  'date',
+  'text',
+  'enum',
+  'reference',
+  'multi_enum',
+  'multi_reference',
+  'file',
+];
 
 export interface FieldDef {
   name: string;
   type: FieldType;
   required: boolean;
-  /** `enum` only — the fixed set of allowed values. */
+  /** `enum`/`multi_enum` only — the fixed set of allowed values. */
   options?: string[];
-  /** `reference` only — the name of the entity this field points at. */
+  /** `reference`/`multi_reference` only — the name of the entity this field points at. */
   referenceEntity?: string;
+  /** `enum` only, optional — allowed transitions out of each value; a value with no entry may move to any other option. */
+  transitions?: Record<string, string[]>;
 }
 
 export interface EntityDefinition {

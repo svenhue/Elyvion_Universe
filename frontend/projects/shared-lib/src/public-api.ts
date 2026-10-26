@@ -101,6 +101,7 @@ export * from './lib/agent-engine/agent-engine.component';
 
 export * from './lib/data-engine/data-engine-schema';
 export * from './lib/data-engine/data-engine-api.service';
+export * from './lib/files/files-api.service';
 export * from './lib/data-engine/data-engine.component';
 
 export * from './lib/logging/logging-schema';

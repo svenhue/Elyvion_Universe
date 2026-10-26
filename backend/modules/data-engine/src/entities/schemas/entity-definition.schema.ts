@@ -1,7 +1,18 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-export const FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'text', 'enum', 'reference'] as const;
+export const FIELD_TYPES = [
+  'string',
+  'number',
+  'boolean',
+  'date',
+  'text',
+  'enum',
+  'reference',
+  'multi_enum',
+  'multi_reference',
+  'file',
+] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
 /**
@@ -14,7 +25,11 @@ export type FieldType = (typeof FIELD_TYPES)[number];
  * another entity by name (`referenceEntity`, required) and stores the
  * referenced record's `id` as a plain string — no join/population on
  * read, the owning app resolves it (e.g. the App-Builder's `list` node
- * uses it to filter, see dynamic-app-schema.ts).
+ * uses it to filter, see dynamic-app-schema.ts). `multi_enum`/
+ * `multi_reference` are the array-valued counterparts (Jira labels,
+ * multiple watchers) — filtering by one still works unchanged, since
+ * Mongo already matches `{field: "x"}` against any document where the
+ * array field *contains* `"x"`.
  */
 @Schema({ _id: false })
 export class FieldDef {
@@ -27,13 +42,23 @@ export class FieldDef {
   @Prop({ required: true, default: false })
   required!: boolean;
 
-  /** `enum` only — the fixed set of allowed values. */
+  /** `enum`/`multi_enum` only — the fixed set of allowed values. */
   @Prop({ type: [String] })
   options?: string[];
 
-  /** `reference` only — the name of the entity this field points at. */
+  /** `reference`/`multi_reference` only — the name of the entity this field points at. */
   @Prop()
   referenceEntity?: string;
+
+  /**
+   * `enum` only, optional — the allowed transitions out of each value
+   * ("Offen" → only "In Arbeit", never straight to "Erledigt"). A value
+   * with no entry here (or no `transitions` map at all) may move to any
+   * other option, same as before this existed — this is an opt-in state
+   * machine, not a requirement for every enum field.
+   */
+  @Prop({ type: Object })
+  transitions?: Record<string, string[]>;
 }
 export const FieldDefSchema = SchemaFactory.createForClass(FieldDef);
 

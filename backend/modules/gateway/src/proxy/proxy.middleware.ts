@@ -60,18 +60,37 @@ export function createProxyMiddleware(
     const prefix = module.routePrefix === '/' ? '' : module.routePrefix;
     const targetUrl = `${module.baseUrl}${prefix}${subPath}${query}`;
 
+    // `express.json()` (mounted ahead of this middleware) only parses
+    // `application/json` bodies — anything else (multipart file uploads,
+    // say) passes through untouched, leaving `req.body` empty and the raw
+    // stream still unread. Forwarding `req.body` in that case would send
+    // an empty JSON object with the ORIGINAL multipart content-type header
+    // still attached, which upstream rejects as a truncated multipart body
+    // ("Unexpected end of form") — so a non-JSON request streams `req`
+    // itself through instead, byte for byte, content-length included.
+    const contentType = req.headers['content-type'] ?? '';
+    const isJsonBody = contentType.includes('application/json');
+    const isStreamable = !isJsonBody && (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT');
+
     try {
       const upstream = await axios.request({
         url: targetUrl,
         method: req.method as never,
-        data: req.body,
+        data: isStreamable ? req : req.body,
         headers: {
-          'content-type': req.headers['content-type'] ?? 'application/json',
+          'content-type': contentType || 'application/json',
+          ...(isStreamable && req.headers['content-length'] ? { 'content-length': req.headers['content-length'] } : {}),
           'x-correlation-id': correlationId,
           authorization: req.headers.authorization,
         },
+        // Buffered as raw bytes, never auto-JSON-parsed — a response can be
+        // binary (the `files` module streams a download back), and axios's
+        // default `responseType: 'json'` would mangle anything that isn't.
+        responseType: 'arraybuffer',
         validateStatus: () => true,
         timeout: 10_000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
       });
 
       for (const [key, value] of Object.entries(upstream.headers)) {
@@ -79,7 +98,14 @@ export function createProxyMiddleware(
           res.setHeader(key, value as string);
         }
       }
-      res.status(upstream.status).json(upstream.data);
+      res.status(upstream.status);
+      const responseContentType = (upstream.headers['content-type'] as string | undefined) ?? '';
+      if (responseContentType.includes('application/json')) {
+        const body = upstream.data.length ? JSON.parse(upstream.data.toString('utf-8')) : null;
+        res.json(body);
+      } else {
+        res.send(upstream.data);
+      }
     } catch {
       res.status(502).json({
         error: { statusCode: 502, message: `Module "${moduleName}" is unreachable` },

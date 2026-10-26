@@ -2,6 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { FilesApiService } from '../files/files-api.service';
 import { DataEngineApiService } from './data-engine-api.service';
 import { DataRecord, EntityDefinition, FIELD_TYPES, FieldType } from './data-engine-schema';
 
@@ -9,10 +10,12 @@ interface NewFieldDraft {
   name: string;
   type: FieldType;
   required: boolean;
-  /** `enum` only — comma-separated, same loose-then-coerce pattern as e.g. the workflow builder's id lists. */
+  /** `enum`/`multi_enum` only — comma-separated, same loose-then-coerce pattern as e.g. the workflow builder's id lists. */
   optionsText: string;
-  /** `reference` only. */
+  /** `reference`/`multi_reference` only. */
   referenceEntity: string;
+  /** `enum` only, optional — JSON, e.g. `{"Offen":["In Arbeit"]}`. Empty = unrestricted (every option reachable from every other), same as before this existed. */
+  transitionsText: string;
 }
 
 /** A record's field value mid-edit — always a string in the form, coerced to the field's real type on submit, same loose-then-coerce pattern the rest of this project's dynamic forms (workflow steps, actions) use. */
@@ -38,7 +41,11 @@ interface RecordFieldDraft {
 })
 export class DataEngineComponent implements OnInit {
   private readonly dataApi = inject(DataEngineApiService);
+  private readonly filesApi = inject(FilesApiService);
   private readonly route = inject(ActivatedRoute);
+
+  readonly uploadingField = signal<string | null>(null);
+  readonly uploadError = signal('');
 
   readonly entities = signal<EntityDefinition[]>([]);
   readonly selectedEntityName = signal<string | null>(null);
@@ -113,16 +120,30 @@ export class DataEngineComponent implements OnInit {
       const created = await firstValueFrom(
         this.dataApi.createEntity({
           name,
-          fields: fields.map((field) => ({
-            name: field.name.trim(),
-            type: field.type,
-            required: field.required,
-            options:
-              field.type === 'enum'
-                ? field.optionsText.split(',').map((o) => o.trim()).filter(Boolean)
-                : undefined,
-            referenceEntity: field.type === 'reference' ? field.referenceEntity.trim() || undefined : undefined,
-          })),
+          fields: fields.map((field) => {
+            let transitions: Record<string, string[]> | undefined;
+            if (field.type === 'enum' && field.transitionsText.trim()) {
+              try {
+                transitions = JSON.parse(field.transitionsText);
+              } catch {
+                throw new Error(`Übergänge für Feld "${field.name}" sind kein gültiges JSON.`);
+              }
+            }
+            return {
+              name: field.name.trim(),
+              type: field.type,
+              required: field.required,
+              options:
+                field.type === 'enum' || field.type === 'multi_enum'
+                  ? field.optionsText.split(',').map((o) => o.trim()).filter(Boolean)
+                  : undefined,
+              referenceEntity:
+                field.type === 'reference' || field.type === 'multi_reference'
+                  ? field.referenceEntity.trim() || undefined
+                  : undefined,
+              transitions,
+            };
+          }),
         }),
       );
       this.newEntityName.set('');
@@ -177,6 +198,32 @@ export class DataEngineComponent implements OnInit {
     this.recordForm.update((fields) => fields?.map((field) => (field.name === name ? { ...field, value } : field)) ?? null);
   }
 
+  readonly uploadedFilenames = signal<Record<string, string>>({});
+
+  async onFileSelected(fieldName: string, event: Event): Promise<void> {
+    const input = event.target;
+    const file = input instanceof HTMLInputElement ? input.files?.[0] : undefined;
+    if (!file) return;
+    this.uploadingField.set(fieldName);
+    this.uploadError.set('');
+    try {
+      const uploaded = await firstValueFrom(this.filesApi.upload(file));
+      this.updateRecordField(fieldName, uploaded.id);
+      this.uploadedFilenames.update((names) => ({ ...names, [fieldName]: uploaded.filename }));
+    } catch (error) {
+      this.uploadError.set(errorMessage(error, 'Datei konnte nicht hochgeladen werden.'));
+    } finally {
+      this.uploadingField.set(null);
+    }
+  }
+
+  /** Opens a stored file in a new tab — fetches it as a blob rather than linking `downloadUrl()` directly, since a plain `<a href>` navigation wouldn't carry the auth interceptor's Bearer token. */
+  async openFile(id: string): Promise<void> {
+    const blob = await firstValueFrom(this.filesApi.download(id));
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, '_blank');
+  }
+
   async saveRecord(): Promise<void> {
     const entity = this.selectedEntity();
     const form = this.recordForm();
@@ -213,16 +260,20 @@ export class DataEngineComponent implements OnInit {
 }
 
 function blankFieldDraft(): NewFieldDraft {
-  return { name: '', type: 'string', required: false, optionsText: '', referenceEntity: '' };
+  return { name: '', type: 'string', required: false, optionsText: '', referenceEntity: '', transitionsText: '' };
 }
 
 function coerceField(field: RecordFieldDraft): unknown {
   if (field.type === 'number') return Number(field.value);
   if (field.type === 'boolean') return field.value === 'true';
+  if (field.type === 'multi_enum' || field.type === 'multi_reference') {
+    return field.value.split(',').map((v) => v.trim()).filter(Boolean);
+  }
   return field.value;
 }
 
 function stringify(value: unknown): string {
+  if (Array.isArray(value)) return value.join(', ');
   return value === undefined || value === null ? '' : String(value);
 }
 

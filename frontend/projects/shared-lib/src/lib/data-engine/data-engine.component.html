@@ -55,6 +55,9 @@
             <option value="date">Datum</option>
             <option value="enum">Feste Werte</option>
             <option value="reference">Verweis auf Entität</option>
+            <option value="multi_enum">Feste Werte (mehrfach)</option>
+            <option value="multi_reference">Verweis auf Entität (mehrfach)</option>
+            <option value="file">Datei</option>
           </select>
           <label class="flex items-center gap-0.5 text-[9px] text-slate-500" title="Pflichtfeld">
             <input type="checkbox" [ngModel]="field.required" (ngModelChange)="updateFieldRow($index, { required: $event })" />
@@ -62,7 +65,7 @@
           </label>
           <button type="button" class="text-slate-300 hover:text-rose-600" (click)="removeFieldRow($index)">×</button>
         </div>
-        @if (field.type === 'enum') {
+        @if (field.type === 'enum' || field.type === 'multi_enum') {
           <input
             class="w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
             placeholder="Werte, kommagetrennt (z. B. Offen, In Arbeit, Erledigt)"
@@ -70,12 +73,20 @@
             (ngModelChange)="updateFieldRow($index, { optionsText: $event })"
           />
         }
-        @if (field.type === 'reference') {
+        @if (field.type === 'reference' || field.type === 'multi_reference') {
           <input
             class="w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
             placeholder="Ziel-Entität (Name, z. B. Projekt)"
             [ngModel]="field.referenceEntity"
             (ngModelChange)="updateFieldRow($index, { referenceEntity: $event })"
+          />
+        }
+        @if (field.type === 'enum') {
+          <input
+            class="w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-indigo-400"
+            placeholder='Übergänge, optional (JSON, z. B. {"Offen":["In Arbeit"]})'
+            [ngModel]="field.transitionsText"
+            (ngModelChange)="updateFieldRow($index, { transitionsText: $event })"
           />
         }
       }
@@ -138,6 +149,27 @@
                       [ngModel]="field.value"
                       (ngModelChange)="updateRecordField(field.name, $event)"
                     ></textarea>
+                  } @else if (field.type === 'file') {
+                    <input
+                      type="file"
+                      class="w-full text-[11px]"
+                      [disabled]="uploadingField() === field.name"
+                      (change)="onFileSelected(field.name, $event)"
+                    />
+                    @if (uploadingField() === field.name) {
+                      <span class="text-[10px] text-slate-400">Lade hoch…</span>
+                    } @else if (field.value) {
+                      <button type="button" (click)="openFile(field.value)" class="block truncate text-[10px] text-indigo-600 hover:underline">
+                        {{ uploadedFilenames()[field.name] || field.value }}
+                      </button>
+                    }
+                  } @else if (field.type === 'multi_enum' || field.type === 'multi_reference') {
+                    <input
+                      class="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-indigo-400"
+                      [placeholder]="field.type === 'multi_enum' ? (field.options || []).join(', ') : 'Ids, kommagetrennt'"
+                      [ngModel]="field.value"
+                      (ngModelChange)="updateRecordField(field.name, $event)"
+                    />
                   } @else {
                     <input
                       [type]="field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'"
@@ -150,6 +182,9 @@
                 </label>
               }
             </div>
+            @if (uploadError()) {
+              <p class="text-xs text-rose-600">{{ uploadError() }}</p>
+            }
             <div class="flex gap-2">
               <button
                 type="button"
