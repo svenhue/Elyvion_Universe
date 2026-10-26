@@ -58,6 +58,13 @@ Postgres/Prisma, einfaches RBAC-Modell (`User`/`Role`/`Permission` + Join-Tabell
 
 MongoDB/Mongoose statt Postgres — Konfigurationen für [dynamisch gerenderte Anwendungen](/dynamic-rendering) (`DynamicAppSchema`) sind dokumentenförmig, nicht relational. `POST /schema` löst ein Schema für `applicationId`/`userId`/`settings` auf und entspricht exakt dem, was `DynamicAppService` im Frontend erwartet.
 
+### Elyvion Platform (`backend/elyvion_platform`)
+
+Stellt die gemeinsamen Logging- und Datei-HTTP-APIs bereit. Die eigentliche
+PostgreSQL- und GridFS-Logik liegt als importierbare Bibliothek in
+`backend/packages/shared-py/src/elyvion_shared`; Frontend und TypeScript-Module
+erreichen sie über den registrierten `elyvion_platform`-Service.
+
 ## Business-Module
 
 Jedes neue Fachmodul ist entweder ein Klon von `templates/module-ts` (NestJS) oder `templates/module-py` (FastAPI). Beide:

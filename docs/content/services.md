@@ -16,6 +16,8 @@ title: Verfügbare Services
 | `envelope(data, meta?)` | Standard-Response-Hülle `{ data, meta? }` |
 | `ElyvionHttpClient` | Konfigurierter axios-Wrapper (Timeout, Base-Headers) |
 | `registerModule(options)` | Self-Registration bei der Registry inkl. Retry |
+| `LogStore` | Persistiert und filtert Plattform-Logs in PostgreSQL |
+| `GridFSFileStore` | Speichert, streamt und löscht Dateien in MongoDB GridFS |
 
 ## `elyvion_shared` (Python — `backend/packages/shared-py`)
 
@@ -37,5 +39,6 @@ title: Verfügbare Services
 | Registry | `3010` | Modul-Katalog + Health-Checks |
 | App-Config | `3012` | Dynamic-App-Schemas (MongoDB) — `POST /schema` |
 | Users | `3013` | Nutzer/Rollen/Rechte (Postgres) — `POST /register` (öffentlich), Rest intern |
+| Elyvion Platform | `3030` | Gemeinsame Logging- und File-APIs (`/logs`, `/files`) |
 
 Live-Status aller aktuell registrierten Module: siehe [Admin-Panel](/admin).

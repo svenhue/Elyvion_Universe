@@ -4,11 +4,11 @@ import { map } from 'rxjs/operators';
 import { ApiClientService } from '../api/api-client.service';
 import { ListLogsFilter, LogEntry } from './logging-schema';
 
-/** Talks to the `logging` backend module. */
+/** Talks to the `elyvion_platform` backend module. */
 @Injectable({ providedIn: 'root' })
 export class LoggingApiService {
   private readonly api = inject(ApiClientService);
-  private static readonly MODULE = 'logging';
+  private static readonly MODULE = 'elyvion_platform';
 
   list(filter: ListLogsFilter = {}): Observable<LogEntry[]> {
     const params = new URLSearchParams();

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { ActionsRegistry } from '../actions.registry';
 import { RemoteActionsService } from '../remote-actions.service';
 
-const LOGGING_URL = process.env.LOGGING_URL ?? 'http://localhost:3018';
+const LOGGING_URL = process.env.LOGGING_URL ?? 'http://localhost:3030';
 const SECURITY_URL = process.env.SECURITY_URL ?? 'http://localhost:3022';
 
 interface SubjectContext {

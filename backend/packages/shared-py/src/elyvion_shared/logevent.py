@@ -1,4 +1,4 @@
-"""Mirrors the TypeScript logEvent() helper. Fire-and-forget — a logging
+"""Writes to the platform logging API. Fire-and-forget — a logging
 call failing must never break whatever it's logging, so this neither
 retries nor raises, just swallows the error (unlike register_module()/
 register_remote_action(), which retry because a missed *registration*

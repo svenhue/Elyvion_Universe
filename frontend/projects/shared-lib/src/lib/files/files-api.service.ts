@@ -11,13 +11,13 @@ export interface StoredFileMeta {
   size: number;
 }
 
-/** Talks to the generic `files` backend module (GridFS-backed binary storage). */
+/** Talks to the platform's GridFS-backed binary storage API. */
 @Injectable({ providedIn: 'root' })
 export class FilesApiService {
   private readonly api = inject(ApiClientService);
   private readonly http = inject(HttpClient);
   private readonly gatewayUrl = inject(ELYVION_GATEWAY_URL);
-  private static readonly MODULE = 'files';
+  private static readonly MODULE = 'elyvion_platform';
 
   upload(file: File) {
     const formData = new FormData();
@@ -42,6 +42,6 @@ export class FilesApiService {
 
   /** The raw endpoint `download()` fetches — exposed for reference/debugging, never as an `<a href>` (see `download()`'s doc comment). */
   downloadUrl(id: string): string {
-    return `${this.gatewayUrl}/api/files/files/${id}`;
+    return `${this.gatewayUrl}/api/elyvion_platform/files/${id}`;
   }
 }

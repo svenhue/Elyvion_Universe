@@ -69,7 +69,7 @@ function fieldSchema(field: FieldDef): z.ZodTypeAny {
     case 'multi_reference':
       return z.array(z.string());
     case 'file':
-      // Just the uploaded file's id in the `files` module's GridFS bucket —
+      // Just the uploaded file's id in the platform's GridFS bucket —
       // same "no existence check here" stance as `reference`.
       return z.string();
   }

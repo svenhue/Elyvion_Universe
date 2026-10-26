@@ -106,7 +106,7 @@ export class FrontendActionsService {
 
   private logExecution(actionKey: string, level: 'info' | 'error', input: unknown, output?: unknown, error?: unknown): void {
     this.apiClient
-      .post('logging', '/logs', {
+      .post('elyvion_platform', '/logs', {
         source: 'frontend',
         level,
         message: level === 'info' ? `Action "${actionKey}" ausgeführt.` : `Action "${actionKey}" fehlgeschlagen.`,
