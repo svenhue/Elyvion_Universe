@@ -1,11 +1,26 @@
-import { BadRequestException, Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
 import { WorkflowService } from './workflow.service';
-import { createWorkflowSchema, startRunSchema } from './dto/workflow.dto';
+import {
+  createWorkflowSchema,
+  executeTaskSchema,
+  startRunSchema,
+} from './dto/workflow.dto';
+import { WorkflowProcessor } from './workflow.processor';
 
 @Controller()
 export class WorkflowController {
-  constructor(private readonly workflowService: WorkflowService) {}
+  constructor(
+    private readonly workflowService: WorkflowService,
+    private readonly workflowProcessor: WorkflowProcessor,
+  ) {}
 
   @Get('definitions')
   async list() {
@@ -32,11 +47,27 @@ export class WorkflowController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues);
     }
-    return envelope(await this.workflowService.startRun(key, parsed.data.context));
+    return envelope(
+      await this.workflowService.startRun(key, parsed.data.context),
+    );
   }
 
   @Get('runs/:runId')
   async findRun(@Param('runId') runId: string) {
     return envelope(await this.workflowService.findRun(runId));
+  }
+
+  @Post('tasks/execute')
+  async executeTask(@Body() body: unknown) {
+    const parsed = executeTaskSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues);
+    }
+    return envelope(
+      await this.workflowProcessor.executeTask(
+        parsed.data.step,
+        parsed.data.context,
+      ),
+    );
   }
 }

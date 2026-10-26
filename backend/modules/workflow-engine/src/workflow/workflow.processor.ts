@@ -4,7 +4,12 @@ import { Job, Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { readPath, resolveTemplate } from './resolve-template';
 import { WORKFLOW_QUEUE, WorkflowJobData } from './workflow.constants';
-import { AgentStep, WorkflowDefinitionBody, WorkflowStep } from './workflow-schema';
+import {
+  AgentStep,
+  CallServiceStep,
+  WorkflowDefinitionBody,
+  WorkflowStep,
+} from './workflow-schema';
 
 /**
  * Executes one workflow step per job — the unit BullMQ retries/backs off
@@ -16,7 +21,8 @@ import { AgentStep, WorkflowDefinitionBody, WorkflowStep } from './workflow-sche
 @Processor(WORKFLOW_QUEUE)
 export class WorkflowProcessor extends WorkerHost {
   private readonly logger = new Logger(WorkflowProcessor.name);
-  private readonly registryUrl = process.env.REGISTRY_URL ?? 'http://localhost:3010';
+  private readonly registryUrl =
+    process.env.REGISTRY_URL ?? 'http://localhost:3010';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -28,21 +34,34 @@ export class WorkflowProcessor extends WorkerHost {
   async process(job: Job<WorkflowJobData>): Promise<void> {
     const { runId, stepId } = job.data;
 
-    const run = await this.prisma.workflowRun.findUnique({ where: { id: runId }, include: { workflow: true } });
+    const run = await this.prisma.workflowRun.findUnique({
+      where: { id: runId },
+      include: { workflow: true },
+    });
     if (!run) {
-      this.logger.warn(`Run "${runId}" no longer exists — dropping job for step "${stepId}".`);
+      this.logger.warn(
+        `Run "${runId}" no longer exists — dropping job for step "${stepId}".`,
+      );
       return;
     }
     const body = run.workflow.definition as unknown as WorkflowDefinitionBody;
     const step = body.steps.find((candidate) => candidate.id === stepId);
     if (!step) {
-      this.logger.error(`Step "${stepId}" not found in workflow "${run.workflow.key}".`);
+      this.logger.error(
+        `Step "${stepId}" not found in workflow "${run.workflow.key}".`,
+      );
       return;
     }
 
     const context = run.context as Record<string, unknown>;
     const stepRun = await this.prisma.workflowStepRun.create({
-      data: { runId, stepId, status: 'running', input: context as object, attempt: job.attemptsMade + 1 },
+      data: {
+        runId,
+        stepId,
+        status: 'running',
+        input: context as object,
+        attempt: job.attemptsMade + 1,
+      },
     });
 
     try {
@@ -55,7 +74,10 @@ export class WorkflowProcessor extends WorkerHost {
       if (output !== undefined) {
         nextContext = {
           ...context,
-          steps: { ...((context['steps'] as Record<string, unknown>) ?? {}), [step.id]: output },
+          steps: {
+            ...((context['steps'] as Record<string, unknown>) ?? {}),
+            [step.id]: output,
+          },
         };
       }
       if (step.type === 'set-variable') {
@@ -65,9 +87,16 @@ export class WorkflowProcessor extends WorkerHost {
       await this.prisma.$transaction([
         this.prisma.workflowStepRun.update({
           where: { id: stepRun.id },
-          data: { status: 'succeeded', output: (output ?? null) as object, finishedAt: new Date() },
+          data: {
+            status: 'succeeded',
+            output: (output ?? null) as object,
+            finishedAt: new Date(),
+          },
         }),
-        this.prisma.workflowRun.update({ where: { id: runId }, data: { context: nextContext as object } }),
+        this.prisma.workflowRun.update({
+          where: { id: runId },
+          data: { context: nextContext as object },
+        }),
       ]);
 
       const branches = this.nextStepIds(step, nextContext);
@@ -93,7 +122,9 @@ export class WorkflowProcessor extends WorkerHost {
       });
 
       if (step.onError?.length) {
-        this.logger.warn(`Step "${step.id}" failed, running its onError branch: ${message}`);
+        this.logger.warn(
+          `Step "${step.id}" failed, running its onError branch: ${message}`,
+        );
         await this.queue.addBulk(
           step.onError.map((compensationStepId) => ({
             name: 'run-step',
@@ -112,7 +143,17 @@ export class WorkflowProcessor extends WorkerHost {
     }
   }
 
-  private nextStepIds(step: WorkflowStep, context: Record<string, unknown>): string[] {
+  executeTask(
+    step: CallServiceStep,
+    context: Record<string, unknown> = {},
+  ): Promise<unknown> {
+    return this.executeStep(step, context);
+  }
+
+  private nextStepIds(
+    step: WorkflowStep,
+    context: Record<string, unknown>,
+  ): string[] {
     if (step.type === 'condition') {
       const actual = readPath(context, step.path.replace(/^\$context\./, ''));
       return (actual === step.equals ? step.whenTrue : step.next) ?? [];
@@ -123,14 +164,19 @@ export class WorkflowProcessor extends WorkerHost {
     if (step.type === 'exclusive-gateway') {
       // The gateway's own just-recorded output (see executeStep's 'exclusive-gateway'
       // case) — stringified, since a rule's output and a case's `value` are both free-form.
-      const output = (context['steps'] as Record<string, unknown> | undefined)?.[step.id];
+      const output = (
+        context['steps'] as Record<string, unknown> | undefined
+      )?.[step.id];
       const match = step.cases.find((c) => c.value === String(output));
       return match ? match.next : (step.next ?? []);
     }
     return step.next ?? [];
   }
 
-  private async executeStep(step: WorkflowStep, context: Record<string, unknown>): Promise<unknown> {
+  private async executeStep(
+    step: WorkflowStep,
+    context: Record<string, unknown>,
+  ): Promise<unknown> {
     switch (step.type) {
       case 'set-variable':
         return resolveTemplate(step.value, context);
@@ -147,10 +193,15 @@ export class WorkflowProcessor extends WorkerHost {
 
       case 'http-request': {
         const url = resolveTemplate(step.url, context) as string;
-        const body = step.body ? resolveTemplate(step.body, context) : undefined;
+        const body = step.body
+          ? resolveTemplate(step.body, context)
+          : undefined;
         const response = await fetch(url, {
           method: step.method,
-          headers: { 'content-type': 'application/json', ...(step.headers ?? {}) },
+          headers: {
+            'content-type': 'application/json',
+            ...(step.headers ?? {}),
+          },
           body: body ? JSON.stringify(body) : undefined,
         });
         return { status: response.status, body: await safeJson(response) };
@@ -158,9 +209,12 @@ export class WorkflowProcessor extends WorkerHost {
 
       case 'call-service': {
         const moduleInfo = await this.lookupModule(step.serviceName);
-        const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
+        const prefix =
+          moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
         const url = `${moduleInfo.baseUrl}${prefix}${step.path}`;
-        const body = step.body ? resolveTemplate(step.body, context) : undefined;
+        const body = step.body
+          ? resolveTemplate(step.body, context)
+          : undefined;
         const response = await fetch(url, {
           method: step.method ?? 'GET',
           headers: { 'content-type': 'application/json' },
@@ -171,7 +225,8 @@ export class WorkflowProcessor extends WorkerHost {
 
       case 'action': {
         const moduleInfo = await this.lookupModule('actions-engine');
-        const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
+        const prefix =
+          moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
         const url = `${moduleInfo.baseUrl}${prefix}/execute/${step.actionKey}`;
         const input = step.input ? resolveTemplate(step.input, context) : {};
         const response = await fetch(url, {
@@ -181,7 +236,9 @@ export class WorkflowProcessor extends WorkerHost {
         });
         const parsed = await safeJson(response);
         if (!response.ok) {
-          throw new Error(`Action "${step.actionKey}" fehlgeschlagen: ${JSON.stringify(parsed)}`);
+          throw new Error(
+            `Action "${step.actionKey}" fehlgeschlagen: ${JSON.stringify(parsed)}`,
+          );
         }
         return (parsed as { data?: unknown })?.data ?? parsed;
       }
@@ -203,7 +260,11 @@ export class WorkflowProcessor extends WorkerHost {
   }
 
   /** Shared by the `rule` step and the `exclusive-gateway`'s rule-based branch selection — both just run a `rules-engine` rule and hand back its output. */
-  private async runRuleByKey(ruleKey: string, input: unknown, context: Record<string, unknown>): Promise<unknown> {
+  private async runRuleByKey(
+    ruleKey: string,
+    input: unknown,
+    context: Record<string, unknown>,
+  ): Promise<unknown> {
     const moduleInfo = await this.lookupModule('rules-engine');
     const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
     const url = `${moduleInfo.baseUrl}${prefix}/rules/${ruleKey}/execute`;
@@ -215,13 +276,18 @@ export class WorkflowProcessor extends WorkerHost {
     });
     const parsed = await safeJson(response);
     if (!response.ok) {
-      throw new Error(`Regel "${ruleKey}" fehlgeschlagen: ${JSON.stringify(parsed)}`);
+      throw new Error(
+        `Regel "${ruleKey}" fehlgeschlagen: ${JSON.stringify(parsed)}`,
+      );
     }
     return (parsed as { data?: { output?: unknown } })?.data?.output;
   }
 
   /** The n8n-style "AI Agent node" — starts an `agent-engine` run and polls it to completion (bounded by `step.timeoutSeconds`), since the step after this one typically needs the agent's actual answer, not just a run id. */
-  private async runAgentStep(step: AgentStep, context: Record<string, unknown>): Promise<unknown> {
+  private async runAgentStep(
+    step: AgentStep,
+    context: Record<string, unknown>,
+  ): Promise<unknown> {
     const moduleInfo = await this.lookupModule('agent-engine');
     const prefix = moduleInfo.routePrefix === '/' ? '' : moduleInfo.routePrefix;
     const task = resolveTemplate(step.task, context);
@@ -233,27 +299,42 @@ export class WorkflowProcessor extends WorkerHost {
     });
     const created = (await safeJson(createResponse)) as { id?: string } | null;
     if (!createResponse.ok || !created?.id) {
-      throw new Error(`Agent-Run konnte nicht gestartet werden: ${JSON.stringify(created)}`);
+      throw new Error(
+        `Agent-Run konnte nicht gestartet werden: ${JSON.stringify(created)}`,
+      );
     }
 
     const timeoutMs = (step.timeoutSeconds ?? 120) * 1000;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const pollResponse = await fetch(`${moduleInfo.baseUrl}${prefix}/runs/${created.id}`);
-      const run = (await safeJson(pollResponse)) as { status?: string; final_answer?: string; error?: string } | null;
+      const pollResponse = await fetch(
+        `${moduleInfo.baseUrl}${prefix}/runs/${created.id}`,
+      );
+      const run = (await safeJson(pollResponse)) as {
+        status?: string;
+        final_answer?: string;
+        error?: string;
+      } | null;
       if (run?.status === 'succeeded') return run.final_answer;
-      if (run?.status === 'failed') throw new Error(`Agent-Run fehlgeschlagen: ${run.error}`);
+      if (run?.status === 'failed')
+        throw new Error(`Agent-Run fehlgeschlagen: ${run.error}`);
     }
-    throw new Error(`Agent-Run "${created.id}" hat das Zeitlimit von ${step.timeoutSeconds ?? 120}s überschritten.`);
+    throw new Error(
+      `Agent-Run "${created.id}" hat das Zeitlimit von ${step.timeoutSeconds ?? 120}s überschritten.`,
+    );
   }
 
-  private async lookupModule(name: string): Promise<{ baseUrl: string; routePrefix: string }> {
+  private async lookupModule(
+    name: string,
+  ): Promise<{ baseUrl: string; routePrefix: string }> {
     const response = await fetch(`${this.registryUrl}/modules/${name}`);
     if (!response.ok) {
       throw new Error(`Service "${name}" is not registered.`);
     }
-    const envelope = (await response.json()) as { data: { baseUrl: string; routePrefix: string } };
+    const envelope = (await response.json()) as {
+      data: { baseUrl: string; routePrefix: string };
+    };
     return envelope.data;
   }
 }

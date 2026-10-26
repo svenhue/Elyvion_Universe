@@ -35,6 +35,10 @@ see `ActionsApiService`/`FrontendActionsService` on the frontend side).
   backend action as an MCP tool, so an AI agent gets the same catalog a
   human sees in the Actions panel.
 
+Remote actions are executed through the workflow-engine's single-task
+runner (`POST /tasks/execute`), which performs the registered module call.
+This keeps HTTP service-call execution shared with workflows.
+
 ## Local dev
 
 ```bash

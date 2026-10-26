@@ -17,6 +17,10 @@ workflows, plus stores both kinds' definitions for the pro-code builder.
 - `GET /definitions` / `GET /definitions/:key` — read definitions.
 - `POST /definitions/:key/run` — start a run (`{ context }` seeds it).
 - `GET /runs/:runId` — a run's status and its full step history.
+- `POST /tasks/execute` — execute one `call-service` task through the
+  workflow runner without creating a workflow run or step history. The
+  actions-engine uses this endpoint to share the runner's service-call
+  execution rather than maintaining a second HTTP proxy implementation.
 
 ## Local dev
 
