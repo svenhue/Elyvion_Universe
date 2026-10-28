@@ -90,5 +90,5 @@ uv sync
 uv run uvicorn app.main:app --reload --port 8100
 ```
 
-Needs Neo4j running — see `../../docker-compose.yml` (Browser UI at
+Needs Neo4j running — see `../../../docker-compose.yml` (Browser UI at
 http://localhost:7474, default auth `neo4j` / `elyvion-ontology`).

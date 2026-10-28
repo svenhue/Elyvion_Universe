@@ -80,7 +80,7 @@ const PUBLIC_ROUTES: PublicRouteAllowlist = {
 
 ## Einen neuen OIDC-Client registrieren
 
-Neues Frontend/App? Redirect-URI in `backend/modules/auth/src/oidc/clients.ts` eintragen (Allowlist — nicht zur Laufzeit verhandelbar). Für produktive Mandanten-Clients diese statische Liste durch eine DB-gestützte Client-Registrierung ersetzen.
+Neues Frontend/App? Redirect-URI in `backend/modules/security-layer/auth/src/oidc/clients.ts` eintragen (Allowlist — nicht zur Laufzeit verhandelbar). Für produktive Mandanten-Clients diese statische Liste durch eine DB-gestützte Client-Registrierung ersetzen.
 
 ## Angular-Komponenten/Services teilen
 

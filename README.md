@@ -14,7 +14,7 @@ Details zu jedem Bereich stehen im jeweiligen Unterordner-README sowie ausführl
 
 ## Quickstart
 
-Ein Befehl, direkt nach dem Klonen — startet Infra-Container, installiert alle Abhängigkeiten (Backend-Workspace + beide Python-Module), wendet offene Prisma-Migrationen an und startet jedes Backend-Modul sowie das Frontend im Hintergrund:
+Ein Befehl, direkt nach dem Klonen — startet Infra-Container, installiert alle Abhängigkeiten (Backend-Workspace + Python-Services), wendet offene Prisma-Migrationen an und startet jedes Backend-Modul sowie das Frontend im Hintergrund:
 
 ```bash
 ./scripts/dev-up.sh
@@ -48,8 +48,8 @@ cd backend && docker compose up -d
 # Alle TypeScript-Backend-Services im Dev-Modus starten (Turborepo)
 pnpm install && pnpm dev
 
-# Python-Module (agent-engine, ontology-engine) einzeln, z. B.
-cd modules/ontology-engine && uv sync && uv run uvicorn app.main:app --reload
+# Python-Module (agent-engine, knowledge-layer/ontology-engine) einzeln, z. B.
+cd modules/knowledge-layer/ontology-engine && uv sync && uv run uvicorn app.main:app --reload
 
 # Doku-Website
 cd ../../docs && npm install && npm run dev

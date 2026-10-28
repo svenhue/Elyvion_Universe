@@ -21,7 +21,16 @@ Das laufende System (registrierte Module, Health-Status) siehst du im **[Admin-P
 ```
 Elyvion_Universe/
 ├── backend/
-│   ├── modules/{gateway,auth,registry}/
+│   ├── modules/{gateway,registry}/
+│   ├── modules/data-layer/{data-engine,data-adapters}/
+│   ├── modules/knowledge-layer/ontology-engine/
+│   ├── modules/AI-and-execution-layer/{agent-engine,actions-engine,workflow-engine,chat}/
+│   ├── modules/businesslogic-and-rule-layer/rules-engine/
+│   ├── modules/resource-layer/{agent-repository,app-config,integrations,solutions}/
+│   ├── modules/security-layer/{auth,security,users}/
+│   ├── modules/development-layer/{deployment-engine,repository,version-control}/
+│   ├── modules/semantic-layer/
+│   ├── elyvion_platform/
 │   ├── templates/{module-ts,module-py}/
 │   └── packages/{shared-ts,shared-py}/
 ├── docs/              ← diese Website

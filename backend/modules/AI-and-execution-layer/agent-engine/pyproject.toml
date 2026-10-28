@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-elyvion-shared = { path = "../../packages/shared-py" }
+elyvion-shared = { path = "../../../packages/shared-py" }
 
 [build-system]
 requires = ["hatchling"]

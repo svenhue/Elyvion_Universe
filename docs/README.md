@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-Für funktionierende Live-Daten im Admin-Panel müssen `backend/modules/registry` und `backend/modules/auth` laufen (siehe [`backend/README.md`](../backend/README.md)).
+Für funktionierende Live-Daten im Admin-Panel müssen `backend/modules/registry` und `backend/modules/security-layer/auth` laufen (siehe [`backend/README.md`](../backend/README.md)).
 
 ## Struktur
 

@@ -29,7 +29,7 @@ Einziger öffentlicher Einstiegspunkt. Validiert jeden eingehenden Request unter
 
 Pfadschema: `GET /api/{moduleName}/{restlicher-pfad}` → `{module.baseUrl}{module.routePrefix}{restlicher-pfad}`.
 
-### Auth (`backend/modules/auth`)
+### Auth (`backend/modules/security-layer/auth`)
 
 Vollständiger OpenID-Connect-Provider (`oidc-provider`), kein Eigenbau von Krypto-Logik. Bietet:
 
@@ -40,13 +40,13 @@ Vollständiger OpenID-Connect-Provider (`oidc-provider`), kein Eigenbau von Kryp
 - Redirect-URIs sind pro Client explizit als Allowlist registriert (`src/oidc/clients.ts`) – nicht verhandelbar zur Laufzeit
 - Access Tokens sind **selbstständige JWTs** (RFC 9068, `at+jwt`) statt opaker Referenz-Tokens – über ein Resource Indicator (RFC 8707) mit fester Audience `API_AUDIENCE` (Default `elyvion:api`), die Gateway und Module beim Verifizieren prüfen (`verifyBearerToken(..., audience)`)
 
-Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`). Auth hält **keine eigenen Nutzerdaten** mehr — `findAccount()` und die Credential-Prüfung beim Login rufen direkt (nicht über das Gateway) `backend/modules/users` auf; `modules/users` ist die alleinige Quelle für Nutzer/Rollen/Rechte.
+Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`). Auth hält **keine eigenen Nutzerdaten** mehr — `findAccount()` und die Credential-Prüfung beim Login rufen direkt (nicht über das Gateway) den `users`-Service auf; dieser ist die alleinige Quelle für Nutzer/Rollen/Rechte.
 
 ### Registry (`backend/modules/registry`)
 
 Persistenter Modul-Katalog (Postgres via Prisma). Jedes Modul registriert sich beim Start selbst (`POST /modules/register`); ein Cronjob pingt alle `healthCheckUrl`s alle 30 Sekunden und aktualisiert den Status (`healthy` / `unhealthy`).
 
-### Users (`backend/modules/users`)
+### Users (`backend/modules/security-layer/users`)
 
 Postgres/Prisma, einfaches RBAC-Modell (`User`/`Role`/`Permission` + Join-Tabellen). Endpunkte:
 
@@ -54,7 +54,7 @@ Postgres/Prisma, einfaches RBAC-Modell (`User`/`Role`/`Permission` + Join-Tabell
 - `POST /verify-credentials`, `GET /by-id/:id` — **intern**, nur von `modules/auth` direkt aufgerufen, nie über das Gateway
 - `GET/POST /roles`, `/permissions`, `POST /roles/:roleId/permissions/:permissionId`, `POST /users/:userId/roles/:roleId` — Rechteverwaltung
 
-### App-Config (`backend/modules/app-config`)
+### App-Config (`backend/modules/resource-layer/app-config`)
 
 MongoDB/Mongoose statt Postgres — Konfigurationen für [dynamisch gerenderte Anwendungen](/dynamic-rendering) (`DynamicAppSchema`) sind dokumentenförmig, nicht relational. `POST /schema` löst ein Schema für `applicationId`/`userId`/`settings` auf und entspricht exakt dem, was `DynamicAppService` im Frontend erwartet.
 
@@ -64,6 +64,50 @@ Stellt die gemeinsamen Logging- und Datei-HTTP-APIs bereit. Die eigentliche
 PostgreSQL- und GridFS-Logik liegt als importierbare Bibliothek in
 `backend/packages/shared-py/src/elyvion_shared`; Frontend und TypeScript-Module
 erreichen sie über den registrierten `elyvion_platform`-Service.
+
+### Data-Layer (`backend/modules/data-layer`)
+
+Gruppiert `data-engine` (dynamische Entitäten und CRUD) sowie
+`data-adapters` (Anbindung externer Datenquellen) als eigenständige,
+weiterhin separat registrierte Services.
+
+### Knowledge-Layer (`backend/modules/knowledge-layer`)
+
+Gruppiert `ontology-engine` als eigenständigen Service für Ontologien und
+die Modellierung der Plattformumgebung.
+
+### AI-and-execution-layer (`backend/modules/AI-and-execution-layer`)
+
+Gruppiert `agent-engine`, `actions-engine`, `workflow-engine` und `chat` als
+eigenständige Services für agentische Abläufe, Actions, Workflow-Ausführung
+und Konversationen.
+
+### Businesslogic-and-rule-layer (`backend/modules/businesslogic-and-rule-layer`)
+
+Gruppiert `rules-engine` als eigenständigen Service zum Verwalten und
+Ausführen von Geschäftsregeln.
+
+### Resource-Layer (`backend/modules/resource-layer`)
+
+Gruppiert `app-config` zur Verwaltung dynamischer App-Schemas,
+`integrations` zur Verwaltung von Integrationsverbindungen sowie `solutions`
+zur Verwaltung deploybarer Ressourcen-Bündel.
+
+### Security-Layer (`backend/modules/security-layer`)
+
+Gruppiert `auth` für OpenID Connect, `security` für Autorisierung und `users`
+für Nutzer, Rollen und Berechtigungen. Die Services bleiben separat registriert.
+
+### Development-Layer (`backend/modules/development-layer`)
+
+Gruppiert `deployment-engine` zum Bauen und Ausführen deploybarer Artefakte,
+`repository` für kuratierte Definitionssammlungen und `version-control` zur
+Speicherung versionierter Objekt-Snapshots als eigenständige Services.
+
+### Semantic-Layer (`backend/modules/semantic-layer`)
+
+Vorgesehener Layer für semantische Modellierungsdienste; aktuell ist ihm noch
+kein Service zugeordnet.
 
 ## Business-Module
 

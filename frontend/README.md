@@ -18,7 +18,7 @@ npm start                        # baut shared-lib, dann http://localhost:4200
 
 ## shared-lib — Bausteine
 
-- **Auth** (`auth/*`): OAuth 2.1 Authorization-Code-Flow mit PKCE gegen `backend/modules/auth`, `AuthService`, `createAuthInterceptor()`
+- **Auth** (`auth/*`): OAuth 2.1 Authorization-Code-Flow mit PKCE gegen `backend/modules/security-layer/auth`, `AuthService`, `createAuthInterceptor()`
 - **API** (`api/*`): `ApiClientService` gegen das Gateway (`/api/{modul}/...`)
 - **UI** (`ui/*`): `ElvButtonComponent`, `ElvCardComponent`
 - **Dynamic Rendering** (`dynamic-render/*`): JSON-Schema-getriebenes Rendering kompletter Angular-Anwendungen zur Laufzeit — siehe [Doku](../docs/content/dynamic-rendering.md)

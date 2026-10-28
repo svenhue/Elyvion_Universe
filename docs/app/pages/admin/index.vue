@@ -33,7 +33,7 @@ const { data: discovery } = await useFetch<{ issuer: string; registration_endpoi
   { server: false },
 )
 
-// The seeded client list lives in code (backend/modules/auth/src/oidc/clients.ts),
+// The seeded client list lives in code (backend/modules/security-layer/auth/src/oidc/clients.ts),
 // not behind an API — shown here for visibility until self-service registration exists.
 const seededClients: OidcClient[] = [
   {

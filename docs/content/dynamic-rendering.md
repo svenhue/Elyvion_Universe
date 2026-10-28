@@ -83,4 +83,4 @@ dynamicAppService.loadApplication({
 }).subscribe((schema) => this.schema.set(schema));
 ```
 
-Das `schemaEndpoint` zeigt auf [`backend/modules/app-config`](/architecture) (NestJS + Mongoose/MongoDB), das Schemas pro `applicationId` ausliefert (`userId`/`settings` werden entgegengenommen, aber noch nicht für Personalisierung genutzt). `frontend/projects/client` ist bereits fertig damit verdrahtet: `client/src/app/app.config.ts` registriert `button` → `ElvButtonComponent`, `home/home.component.ts` rendert die per `applicationId: 'default'` geladene Schema.
+Das `schemaEndpoint` zeigt auf [`backend/modules/resource-layer/app-config`](/architecture) (NestJS + Mongoose/MongoDB), das Schemas pro `applicationId` ausliefert (`userId`/`settings` werden entgegengenommen, aber noch nicht für Personalisierung genutzt). `frontend/projects/client` ist bereits fertig damit verdrahtet: `client/src/app/app.config.ts` registriert `button` → `ElvButtonComponent`, `home/home.component.ts` rendert die per `applicationId: 'default'` geladene Schema.

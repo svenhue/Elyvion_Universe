@@ -79,7 +79,7 @@ done
 # --- 2. Backend: env files, dependencies, Prisma migrations ---
 
 log "ensuring every backend module has a .env (copied from .env.example where missing)…"
-for module_dir in "$ROOT_DIR"/backend/modules/*/; do
+for module_dir in "$ROOT_DIR"/backend/modules/*/ "$ROOT_DIR"/backend/modules/*/*/ "$ROOT_DIR"/backend/elyvion_platform/; do
   module_dir="${module_dir%/}"
   if [ -f "$module_dir/.env.example" ] && [ ! -f "$module_dir/.env" ]; then
     cp "$module_dir/.env.example" "$module_dir/.env"
@@ -90,31 +90,38 @@ done
 log "installing backend (pnpm workspace) dependencies…"
 (cd "$ROOT_DIR/backend" && pnpm install)
 
-PRISMA_MODULES=(registry users workflow-engine logging security telemetry)
-for module in "${PRISMA_MODULES[@]}"; do
-  module_dir="$ROOT_DIR/backend/modules/$module"
+PRISMA_MODULE_PATHS=(registry security-layer/users AI-and-execution-layer/workflow-engine logging security-layer/security observability/telemetry)
+for module_path in "${PRISMA_MODULE_PATHS[@]}"; do
+  module_name="$(basename "$module_path")"
+  module_dir="$ROOT_DIR/backend/modules/$module_path"
   [ -d "$module_dir/prisma" ] || continue
-  log "applying Prisma migrations for $module…"
+  log "applying Prisma migrations for $module_name…"
   (cd "$module_dir" && npx prisma migrate deploy && npx prisma generate) \
-    || fail "Prisma migration failed for $module — check $module_dir/.env's DATABASE_URL."
+    || fail "Prisma migration failed for $module_name — check $module_dir/.env's DATABASE_URL."
 done
 
 log "syncing Python module dependencies (uv)…"
-for module in agent-engine ontology-engine; do
-  module_dir="$ROOT_DIR/backend/modules/$module"
-  (cd "$module_dir" && "${UV[@]}" sync) || fail "uv sync failed for $module."
+for module_path in AI-and-execution-layer/agent-engine knowledge-layer/ontology-engine; do
+  module_name="$(basename "$module_path")"
+  module_dir="$ROOT_DIR/backend/modules/$module_path"
+  (cd "$module_dir" && "${UV[@]}" sync) || fail "uv sync failed for $module_name."
 done
+(cd "$ROOT_DIR/backend/elyvion_platform" && "${UV[@]}" sync) \
+  || fail "uv sync failed for elyvion-platform."
 
 # --- 3. Start everything ---
 
 log "starting all TypeScript backend modules (pnpm dev, via Turborepo)…"
 (cd "$ROOT_DIR/backend" && start_bg "backend-ts" "$LOG_DIR/backend-ts.log" pnpm dev)
 
-for module in agent-engine ontology-engine; do
-  module_dir="$ROOT_DIR/backend/modules/$module"
+for module_path in AI-and-execution-layer/agent-engine knowledge-layer/ontology-engine; do
+  module_name="$(basename "$module_path")"
+  module_dir="$ROOT_DIR/backend/modules/$module_path"
   port=$(grep -h '^PORT=' "$module_dir/.env" | head -1 | cut -d= -f2)
-  (cd "$module_dir" && start_bg "$module" "$LOG_DIR/$module.log" "${UV[@]}" run uvicorn app.main:app --reload --port "$port")
+  (cd "$module_dir" && start_bg "$module_name" "$LOG_DIR/$module_name.log" "${UV[@]}" run uvicorn app.main:app --reload --port "$port")
 done
+port=$(grep -h '^PORT=' "$ROOT_DIR/backend/elyvion_platform/.env" | head -1 | cut -d= -f2)
+(cd "$ROOT_DIR/backend/elyvion_platform" && start_bg "elyvion-platform" "$LOG_DIR/elyvion-platform.log" "${UV[@]}" run uvicorn app.main:app --reload --port "$port")
 
 log "building the shared Angular library once before serving the client…"
 (cd "$ROOT_DIR/frontend" && npm install && npm run build:lib) \

@@ -9,7 +9,7 @@ docker compose up -d        # Postgres + Adminer (localhost:8081) + MongoDB
 # lokal läuft bereits Postgres/MongoDB? docker-compose ist optional — Module lesen nur DATABASE_URL/MONGODB_URI.
 
 # jedes Modul braucht eine .env (einmalig, pro Modul):
-for m in modules/registry modules/auth modules/gateway modules/users modules/app-config templates/module-ts; do
+for m in modules/registry modules/security-layer/auth modules/gateway modules/security-layer/users modules/resource-layer/app-config templates/module-ts; do
   cp "$m/.env.example" "$m/.env"
 done
 
@@ -21,7 +21,7 @@ pnpm --filter app-config run seed    # legt die "default" App-Config an (ein But
 pnpm dev                          # startet alle Module parallel (Turborepo)
 ```
 
-Reihenfolge beim ersten Start egal — jedes Modul versucht mehrfach, sich bei der Registry zu registrieren (Retry mit Backoff), falls diese noch hochfährt. Es gibt keinen Seed-User mehr — Accounts werden über `POST /api/users/register` (bzw. die Angular-Registrierungsseite) angelegt; Auth validiert Logins gegen `modules/users`.
+Reihenfolge beim ersten Start egal — jedes Modul versucht mehrfach, sich bei der Registry zu registrieren (Retry mit Backoff), falls diese noch hochfährt. Es gibt keinen Seed-User mehr — Accounts werden über `POST /api/users/register` (bzw. die Angular-Registrierungsseite) angelegt; Auth validiert Logins gegen den `users`-Service.
 
 ## Ports (lokal)
 

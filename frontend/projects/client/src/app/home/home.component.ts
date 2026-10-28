@@ -3,7 +3,7 @@ import { AuthService, DynamicAppSchema, DynamicAppService, DynamicRendererCompon
 
 /**
  * The entire app body is driven by the "default" DynamicAppSchema stored
- * in modules/app-config (MongoDB) — see backend/modules/app-config/scripts/seed.ts.
+ * in modules/app-config (MongoDB) — see backend/modules/resource-layer/app-config/scripts/seed.ts.
  * Change that document and this page's content changes without a redeploy.
  */
 @Component({

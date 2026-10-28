@@ -4,7 +4,7 @@ requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' or (python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten')",
+    "(python_full_version < '3.14' and sys_platform != 'emscripten') or (python_full_version < '3.12' and sys_platform == 'emscripten')",
 ]
 
 [[package]]
@@ -23,7 +23,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.40.0" },
-    { name = "elyvion-shared", directory = "../../packages/shared-py" },
+    { name = "elyvion-shared", directory = "../../../packages/shared-py" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
     { name = "mcp", specifier = ">=1.0.0" },
@@ -534,7 +534,7 @@ wheels = [
 [[package]]
 name = "elyvion-shared"
 version = "0.1.0"
-source = { directory = "../../packages/shared-py" }
+source = { directory = "../../../packages/shared-py" }
 dependencies = [
     { name = "asyncpg" },
     { name = "fastapi" },
