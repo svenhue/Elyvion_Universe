@@ -142,3 +142,13 @@ export * from './lib/repository/resource-link';
 export * from './lib/repository/group-by-solution';
 export * from './lib/repository/repository.component';
 export * from './lib/repository/repository.nav';
+
+export * from './lib/data-visualisation/data-viz.types';
+export * from './lib/data-visualisation/chart-view-model';
+export * from './lib/data-visualisation/viz-state.component';
+export * from './lib/data-visualisation/kpi-card.component';
+export * from './lib/data-visualisation/cartesian-chart.component';
+export * from './lib/data-visualisation/specialized-visualizations.component';
+export * from './lib/data-visualisation/data-table.component';
+export * from './lib/data-visualisation/dashboard.component';
+export * from './lib/data-visualisation/stream-line-chart.component';

@@ -71,6 +71,15 @@ in the app's `@source inline(...)` safelist in
 `projects/client/src/styles.css`; the default file includes common colors, spacing, and
 layout utilities.
 
+### Data visualization
+
+Presentation-only visualization components are available through the
+`@elyvion/shared-lib/data-viz` secondary entry point. They use signal inputs,
+computed view models, native SVG, and the shared state display component. They
+do not fetch data. See
+[`src/lib/data-visualisation/README.md`](src/lib/data-visualisation/README.md)
+for property, shared-UI-state, and external-Observable examples.
+
 The dynamic renderer can render registered Angular components as well as native HTML and
 text nodes. For example, a native node can use `{ "id": "heading", "type": "element",
 "element": "h1", "attributes": { "class": "text-2xl font-bold" }, "children": ["copy"] }`,
