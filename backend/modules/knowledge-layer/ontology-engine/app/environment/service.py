@@ -15,6 +15,7 @@ over HTTP instead of calling it directly.
 import os
 
 import httpx
+from elyvion_shared import create_http_client, record_httpx_failure
 from neo4j import AsyncSession
 
 from ..ontologies import repository as ontologies
@@ -139,11 +140,12 @@ async def _ensure_ontology(session: AsyncSession) -> None:
 
 async def _backend_services() -> list[tuple[str, dict[str, object]]]:
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
+        async with create_http_client(timeout=3.0) as client:
             response = await client.get(f"{_REGISTRY_URL}/modules")
             response.raise_for_status()
             envelope = response.json()
-    except httpx.HTTPError:
+    except httpx.HTTPError as error:
+        record_httpx_failure(error)
         return []
 
     modules = envelope.get("data", envelope) if isinstance(envelope, dict) else envelope

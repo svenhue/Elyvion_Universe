@@ -17,14 +17,16 @@ module when the workload calls for it.
 
 1. **`planner.design_team`** — asks the LLM itself to design a team of
    2-4 specialised agents for the given task (name, full system prompt,
-   one-line focus), forced into a structured response via Anthropic's
+   one-line focus), forced into a structured response via function calling
    tool-use rather than parsed from free text. This is the "automatic
    architecture" part: **no multi-agent framework researched (LangGraph,
    CrewAI, AutoGen) actually does this at runtime** — they all require
    agent roles to be authored in advance, with any dynamism limited to
    *routing/delegation* among a pre-defined set. Designing the roles
    themselves per task is this module's own layer on top of LangGraph's
-   primitives, not a standard feature it ships with.
+   primitives, not a standard feature it ships with. All LLM requests are
+   sent through the shared `local-llm` module to the configured Ollama
+   instance.
 2. **`runner.build_graph`** — compiles the planner's team into a real
    LangGraph `StateGraph`: one node per agent, chained sequentially
    (agent *n*'s output feeds agent *n+1*). Only this one topology is
@@ -46,8 +48,10 @@ module when the workload calls for it.
   acceptable MVP trade-off for now — no job queue yet, unlike
   `workflow-engine`'s BullMQ-backed runs.
 
-Without `ANTHROPIC_API_KEY` set, this 503s with a clear message instead
-of failing deep inside the SDK.
+Configure `LOCAL_LLM_URL` to point at the local-llm module. Its global
+Ollama URL, model, temperature, and context size are managed through the
+platform Admin UI; the agent engine does not have a separate provider
+configuration.
 
 ## Local dev
 
@@ -57,5 +61,5 @@ uv sync
 uv run uvicorn app.main:app --reload --port 8101
 ```
 
-Needs the Registry module up (to self-register) and `actions-engine`
-running (its MCP endpoint is this module's only source of tools).
+Needs the Registry module, `local-llm`, and `actions-engine` running.
+Ollama must have the configured model pulled before agent runs can succeed.

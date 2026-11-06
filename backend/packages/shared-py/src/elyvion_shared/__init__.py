@@ -8,6 +8,7 @@ from .logevent import LogEventOptions, log_event
 from .logging import configure_logging, get_logger
 from .log_store import LogStore
 from .registry import RegisterModuleOptions, register_module
+from .traffic import TrafficObservabilityMiddleware, configure_traffic, record_httpx_failure
 
 __all__ = [
     "make_current_user_dependency",
@@ -27,4 +28,7 @@ __all__ = [
     "register_remote_action",
     "LogEventOptions",
     "log_event",
+    "TrafficObservabilityMiddleware",
+    "configure_traffic",
+    "record_httpx_failure",
 ]

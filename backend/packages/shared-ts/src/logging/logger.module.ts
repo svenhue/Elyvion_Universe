@@ -1,5 +1,7 @@
 import { DynamicModule, Module } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
 import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
+import { installHttpTrafficInstrumentation } from '../traffic/http-traffic-instrumentation';
 
 export interface ElyvionLoggerOptions {
   moduleName: string;
@@ -13,6 +15,7 @@ export interface ElyvionLoggerOptions {
 @Module({})
 export class ElyvionLoggerModule {
   static forRoot(options: ElyvionLoggerOptions): DynamicModule {
+    installHttpTrafficInstrumentation(options.moduleName);
     return {
       module: ElyvionLoggerModule,
       imports: [
@@ -20,9 +23,21 @@ export class ElyvionLoggerModule {
           pinoHttp: {
             level: options.level ?? 'info',
             base: { module: options.moduleName },
-            genReqId: (req) =>
-              (req.headers['x-correlation-id'] as string | undefined) ??
-              crypto.randomUUID(),
+            genReqId: (req) => {
+              const incomingId = req.headers['x-correlation-id'];
+              return typeof incomingId === 'string' && incomingId.length <= 200 && /^[\w.-]+$/.test(incomingId)
+                ? createHash('sha256').update(incomingId).digest('hex')
+                : randomUUID();
+            },
+            serializers: {
+              req: (req) => ({
+                id: req.id,
+                method: req.method,
+              }),
+              res: (res) => ({
+                statusCode: res.statusCode,
+              }),
+            },
             customProps: (req) => ({
               correlationId: req.id,
             }),

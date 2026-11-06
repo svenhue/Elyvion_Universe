@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from elyvion_shared import (
     RegisterModuleOptions,
+    TrafficObservabilityMiddleware,
     configure_logging,
     install_exception_handlers,
     register_module,
@@ -12,7 +13,12 @@ from elyvion_shared import (
 from .agents.router import router as agents_router
 from .config import settings
 
-configure_logging(settings.module_name, settings.environment)
+configure_logging(
+    settings.module_name,
+    settings.environment,
+    settings.traffic_ingest_url,
+    settings.traffic_ingest_token_file,
+)
 
 
 @asynccontextmanager
@@ -32,6 +38,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.module_name, lifespan=lifespan)
+app.add_middleware(TrafficObservabilityMiddleware, module_name=settings.module_name)
 install_exception_handlers(app)
 app.include_router(agents_router)
 

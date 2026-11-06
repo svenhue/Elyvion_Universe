@@ -1,3 +1,21 @@
+x-node-healthcheck: &node-healthcheck
+  test: ["CMD-SHELL", "wget -qO- \"http://127.0.0.1:$${PORT}/health\" >/dev/null || exit 1"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
+x-python-healthcheck: &python-healthcheck
+  test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/health', timeout=3)"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
+x-module-environment: &module-environment
+  TRAFFIC_INGEST_URL: http://traffic:3025/internal/events
+  TRAFFIC_INGEST_TOKEN_FILE: /run/secrets/traffic_ingest_token
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,7 +26,7 @@ services:
       POSTGRES_PASSWORD: elyvion
       POSTGRES_DB: elyvion
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -34,6 +52,11 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -66,8 +89,734 @@ services:
       timeout: 5s
       retries: 20
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: elyvion-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "ps"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  auth:
+    build:
+      context: .
+      dockerfile: modules/security-layer/auth/Dockerfile
+    container_name: elyvion-auth
+    restart: unless-stopped
+    environment:
+      PORT: "3011"
+      AUTH_ISSUER_URL: http://localhost:3011
+      MODULE_BASE_URL: http://auth:3011
+      REGISTRY_URL: http://registry:3010
+      API_AUDIENCE: elyvion:api
+      SECURITY_SERVICE_URL: http://security:3022
+      SECURITY_INTERNAL_TOKEN_FILE: /run/secrets/security_internal_token
+      <<: *module-environment
+    secrets:
+      - security_internal_token
+      - traffic_ingest_token
+    ports:
+      - "127.0.0.1:3011:3011"
+    depends_on:
+      security:
+        condition: service_healthy
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  security:
+    build:
+      context: .
+      dockerfile: modules/security-layer/security/Dockerfile
+    container_name: elyvion-security
+    restart: unless-stopped
+    environment:
+      PORT: "3022"
+      MODULE_NAME: security
+      MODULE_BASE_URL: http://security:3022
+      REGISTRY_URL: http://registry:3010
+      AUTH_ISSUER_URL: http://localhost:3011
+      AUTH_JWKS_URL: http://auth:3011
+      API_AUDIENCE: elyvion:api
+      SECURITY_INTERNAL_TOKEN_FILE: /run/secrets/security_internal_token
+      DATABASE_URL: postgresql://elyvion:elyvion@postgres:5432/elyvion?schema=security
+      SECURITY_OPERATOR_TOKEN_FILE: /run/secrets/security_operator_token
+      SECRET_STORE_KEYS_FILE: /run/secrets/secret_store_keys
+      SECRET_STORE_ACTIVE_KEY_VERSION: v1
+      SECRET_STORE_WORKLOAD_CREDENTIALS_FILE: /run/secrets/secret_store_workloads
+      <<: *module-environment
+    secrets:
+      - security_operator_token
+      - security_internal_token
+      - secret_store_keys
+      - secret_store_workloads
+      - traffic_ingest_token
+    ports:
+      - "127.0.0.1:3022:3022"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3022/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  registry:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: registry
+        MODULE_PATH: modules/registry
+    container_name: elyvion-registry
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3010"
+      MODULE_NAME: registry
+      MODULE_BASE_URL: http://registry:3010
+      REGISTRY_URL: http://registry:3010
+      DATABASE_URL: postgresql://elyvion:elyvion@postgres:5432/elyvion?schema=registry
+    secrets:
+      - traffic_ingest_token
+    ports:
+      - "127.0.0.1:3010:3010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: gateway
+        MODULE_PATH: modules/gateway
+    container_name: elyvion-gateway
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3000"
+      MODULE_NAME: gateway
+      MODULE_BASE_URL: http://gateway:3000
+      REGISTRY_URL: http://registry:3010
+      AUTH_ISSUER_URL: http://localhost:3011
+      AUTH_JWKS_URL: http://auth:3011
+      API_AUDIENCE: elyvion:api
+    secrets:
+      - traffic_ingest_token
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      registry:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  actions-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: actions-engine
+        MODULE_PATH: modules/AI-and-execution-layer/actions-engine
+    container_name: elyvion-actions-engine
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3015"
+      MODULE_NAME: actions-engine
+      MODULE_BASE_URL: http://actions-engine:3015
+      REGISTRY_URL: http://registry:3010
+      MONGODB_URI: mongodb://mongo:27017/elyvion_actions
+      LOGGING_URL: http://elyvion-platform:3030
+      SECURITY_URL: http://security:3022
+      WORKFLOW_TASK_TOKEN_FILE: /run/secrets/workflow_task_token
+    secrets:
+      - traffic_ingest_token
+      - workflow_task_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  app-config:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: app-config
+        MODULE_PATH: modules/resource-layer/app-config
+    container_name: elyvion-app-config
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3012"
+      MODULE_NAME: app-config
+      MODULE_BASE_URL: http://app-config:3012
+      REGISTRY_URL: http://registry:3010
+      MONGODB_URI: mongodb://mongo:27017/elyvion_app_config
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  chat:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: chat
+        MODULE_PATH: modules/AI-and-execution-layer/chat
+    container_name: elyvion-chat
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3016"
+      MODULE_NAME: chat
+      MODULE_BASE_URL: http://chat:3016
+      REGISTRY_URL: http://registry:3010
+      MONGODB_URI: mongodb://mongo:27017/elyvion_chat
+      LOCAL_LLM_URL: http://local-llm:3028
+      LOCAL_LLM_SERVICE_TOKEN_FILE: /run/secrets/local_llm_service_token
+    secrets:
+      - traffic_ingest_token
+      - local_llm_service_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      local-llm:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  data-adapters:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: data-adapters
+        MODULE_PATH: modules/data-layer/data-adapters
+    container_name: elyvion-data-adapters
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3019"
+      MODULE_NAME: data-adapters
+      MODULE_BASE_URL: http://data-adapters:3019
+      REGISTRY_URL: http://registry:3010
+      AUTH_ISSUER_URL: http://localhost:3011
+      AUTH_JWKS_URL: http://auth:3011
+      API_AUDIENCE: elyvion:api
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      SECURITY_URL: http://security:3022
+      LOGGING_URL: http://elyvion-platform:3030
+      DATA_ADAPTER_ENVIRONMENT_ID: local-development
+      MONGODB_URI: mongodb://mongo:27017/elyvion_data_adapters
+      VERSION_CONTROL_URL: http://version-control:3026
+      SECURITY_OPERATOR_TOKEN_FILE: /run/secrets/security_operator_token
+    secrets:
+      - traffic_ingest_token
+      - security_operator_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      security:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      version-control:
+        condition: service_healthy
+      elyvion-platform:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  data-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: data-engine
+        MODULE_PATH: modules/data-layer/data-engine
+    container_name: elyvion-data-engine
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3017"
+      MODULE_NAME: data-engine
+      MODULE_BASE_URL: http://data-engine:3017
+      REGISTRY_URL: http://registry:3010
+      MONGODB_URI: mongodb://mongo:27017/elyvion_data_engine
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      VERSION_CONTROL_URL: http://version-control:3026
+      SECURITY_URL: http://security:3022
+      SECURITY_OPERATOR_TOKEN_FILE: /run/secrets/security_operator_token
+    secrets:
+      - traffic_ingest_token
+      - security_operator_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      security:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      version-control:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  deployment-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: deployment-engine
+        MODULE_PATH: modules/development-layer/deployment-engine
+    container_name: elyvion-deployment-engine
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3021"
+      MODULE_NAME: deployment-engine
+      MODULE_BASE_URL: http://deployment-engine:3021
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      SECURITY_URL: http://security:3022
+      SECURITY_OPERATOR_TOKEN_FILE: /run/secrets/security_operator_token
+      TELEMETRY_URL: http://telemetry:3020
+      MONGODB_URI: mongodb://mongo:27017/elyvion_deployment_engine
+    secrets:
+      - traffic_ingest_token
+      - security_operator_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      security:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      telemetry:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  integrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: integrations
+        MODULE_PATH: modules/resource-layer/integrations
+    container_name: elyvion-integrations
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3025"
+      MODULE_NAME: integrations
+      MODULE_BASE_URL: http://integrations:3025
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      MONGODB_URI: mongodb://mongo:27017/elyvion_integrations
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  local-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: local-llm
+        MODULE_PATH: modules/AI-and-execution-layer/local-llm
+    container_name: elyvion-local-llm
+    restart: unless-stopped
+    env_file:
+      - ./modules/AI-and-execution-layer/local-llm/.env
+    environment:
+      <<: *module-environment
+      PORT: "3028"
+      MODULE_NAME: local-llm
+      MODULE_BASE_URL: http://local-llm:3028
+      REGISTRY_URL: http://registry:3010
+      MONGODB_URI: mongodb://mongo:27017/elyvion_local_llm
+      SECURITY_URL: http://security:3022
+      OLLAMA_BASE_URL: http://ollama:11434
+      LOCAL_LLM_SERVICE_TOKEN_FILE: /run/secrets/local_llm_service_token
+    secrets:
+      - traffic_ingest_token
+      - local_llm_service_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      security:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  repository:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: repository
+        MODULE_PATH: modules/development-layer/repository
+    container_name: elyvion-repository
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3027"
+      MODULE_NAME: repository
+      MODULE_BASE_URL: http://repository:3027
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      MONGODB_URI: mongodb://mongo:27017/elyvion_repository
+      VERSION_CONTROL_URL: http://version-control:3026
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      version-control:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  rules-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: rules-engine
+        MODULE_PATH: modules/businesslogic-and-rule-layer/rules-engine
+    container_name: elyvion-rules-engine
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3024"
+      MODULE_NAME: rules-engine
+      MODULE_BASE_URL: http://rules-engine:3024
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      MONGODB_URI: mongodb://mongo:27017/elyvion_rules_engine
+      VERSION_CONTROL_URL: http://version-control:3026
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      version-control:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  solutions:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: solutions
+        MODULE_PATH: modules/resource-layer/solutions
+    container_name: elyvion-solutions
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3023"
+      MODULE_NAME: solutions
+      MODULE_BASE_URL: http://solutions:3023
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      MONGODB_URI: mongodb://mongo:27017/elyvion_solutions
+      VERSION_CONTROL_URL: http://version-control:3026
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      version-control:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  telemetry:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: telemetry
+        MODULE_PATH: modules/observability/telemetry
+    container_name: elyvion-telemetry
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3020"
+      MODULE_NAME: telemetry
+      MODULE_BASE_URL: http://telemetry:3020
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      DATABASE_URL: postgresql://elyvion:elyvion@postgres:5432/elyvion?schema=telemetry
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  traffic:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: traffic
+        MODULE_PATH: modules/observability/traffic
+    container_name: elyvion-traffic
+    restart: unless-stopped
+    env_file:
+      - ./modules/observability/traffic/.env
+    environment:
+      <<: *module-environment
+      PORT: "3025"
+      MODULE_NAME: traffic
+      MODULE_BASE_URL: http://traffic:3025
+      REGISTRY_URL: http://registry:3010
+      DATABASE_URL: postgresql://elyvion:elyvion@postgres:5432/elyvion?schema=traffic
+      SECURITY_URL: http://security:3022
+      TRAFFIC_INGEST_TOKEN_FILE: /run/secrets/traffic_ingest_token
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      security:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  version-control:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: version-control
+        MODULE_PATH: modules/development-layer/version-control
+    container_name: elyvion-version-control
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3026"
+      MODULE_NAME: version-control
+      MODULE_BASE_URL: http://version-control:3026
+      REGISTRY_URL: http://registry:3010
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      MONGODB_URI: mongodb://mongo:27017/elyvion_version_control
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  workflow-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.node-module
+      args:
+        MODULE_NAME: workflow-engine
+        MODULE_PATH: modules/AI-and-execution-layer/workflow-engine
+    container_name: elyvion-workflow-engine
+    restart: unless-stopped
+    environment:
+      <<: *module-environment
+      PORT: "3014"
+      MODULE_NAME: workflow-engine
+      MODULE_BASE_URL: http://workflow-engine:3014
+      REGISTRY_URL: http://registry:3010
+      DATABASE_URL: postgresql://elyvion:elyvion@postgres:5432/elyvion?schema=workflow_engine
+      REDIS_URL: redis://redis:6379
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+      WORKFLOW_TASK_TOKEN_FILE: /run/secrets/workflow_task_token
+    secrets:
+      - traffic_ingest_token
+      - workflow_task_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+    healthcheck: *node-healthcheck
+
+  agent-engine:
+    build:
+      context: .
+      dockerfile: modules/AI-and-execution-layer/agent-engine/Dockerfile
+    container_name: elyvion-agent-engine
+    restart: unless-stopped
+    environment:
+      PORT: "8101"
+      MODULE_NAME: agent-engine
+      MODULE_BASE_URL: http://agent-engine:8101
+      REGISTRY_URL: http://registry:3010
+      AUTH_ISSUER_URL: http://localhost:3011
+      AUTH_JWKS_URL: http://auth:3011
+      ENVIRONMENT: development
+      TRAFFIC_INGEST_URL: http://traffic:3025/internal/events
+      TRAFFIC_INGEST_TOKEN_FILE: /run/secrets/traffic_ingest_token
+      LOCAL_LLM_URL: http://local-llm:3028
+      LOCAL_LLM_SERVICE_TOKEN_FILE: /run/secrets/local_llm_service_token
+      ACTIONS_ENGINE_MCP_URL: http://actions-engine:3015/mcp
+    secrets:
+      - traffic_ingest_token
+      - local_llm_service_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+      local-llm:
+        condition: service_healthy
+    healthcheck: *python-healthcheck
+
+  ontology-engine:
+    build:
+      context: .
+      dockerfile: modules/knowledge-layer/ontology-engine/Dockerfile
+    container_name: elyvion-ontology-engine
+    restart: unless-stopped
+    environment:
+      PORT: "8100"
+      MODULE_NAME: ontology-engine
+      MODULE_BASE_URL: http://ontology-engine:8100
+      REGISTRY_URL: http://registry:3010
+      AUTH_ISSUER_URL: http://localhost:3011
+      ENVIRONMENT: development
+      TRAFFIC_INGEST_URL: http://traffic:3025/internal/events
+      TRAFFIC_INGEST_TOKEN_FILE: /run/secrets/traffic_ingest_token
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: elyvion-ontology
+      ACTIONS_ENGINE_URL: http://actions-engine:3015
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      actions-engine:
+        condition: service_healthy
+    healthcheck: *python-healthcheck
+
+  elyvion-platform:
+    build:
+      context: .
+      dockerfile: elyvion_platform/Dockerfile
+    container_name: elyvion-platform
+    restart: unless-stopped
+    environment:
+      PORT: "3030"
+      MODULE_NAME: elyvion_platform
+      MODULE_BASE_URL: http://elyvion-platform:3030
+      REGISTRY_URL: http://registry:3010
+      AUTH_ISSUER_URL: http://localhost:3011
+      DATABASE_URL: postgresql://elyvion:elyvion@postgres:5432/elyvion
+      MONGODB_URI: mongodb://mongo:27017/elyvion_files
+      TRAFFIC_INGEST_URL: http://traffic:3025/internal/events
+      TRAFFIC_INGEST_TOKEN_FILE: /run/secrets/traffic_ingest_token
+    secrets:
+      - traffic_ingest_token
+    depends_on:
+      registry:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck: *python-healthcheck
+    ports:
+      - "127.0.0.1:3030:3030"
+
+secrets:
+  security_internal_token:
+    file: ./.secrets/users_service_token
+  security_operator_token:
+    file: ./.secrets/security_operator_token
+  secret_store_keys:
+    file: ./.secrets/secret_store_keys.json
+  secret_store_workloads:
+    file: ./.secrets/secret_store_workloads.json
+  traffic_ingest_token:
+    file: ./.secrets/traffic_ingest_token
+  local_llm_service_token:
+    file: ./.secrets/local_llm_service_token
+  workflow_task_token:
+    file: ./.secrets/workflow_task_token
+
 volumes:
   postgres-data:
   mongo-data:
   redis-data:
   neo4j-data:
+  ollama-data:

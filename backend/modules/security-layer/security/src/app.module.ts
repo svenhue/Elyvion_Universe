@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ElyvionLoggerModule } from '@elyvion/shared';
 import { AppController } from './app.controller';
+import { AccountsModule } from './accounts/accounts.module';
 import { AuthorizationModule } from './authorization/authorization.module';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -10,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ConfigModule.forRoot({ isGlobal: true }),
     ElyvionLoggerModule.forRoot({ moduleName: process.env.MODULE_NAME ?? 'security' }),
     PrismaModule,
+    AccountsModule,
     AuthorizationModule,
   ],
   controllers: [AppController],

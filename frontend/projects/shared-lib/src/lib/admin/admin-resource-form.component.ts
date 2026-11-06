@@ -221,7 +221,7 @@ export class AdminResourceFormComponent {
     request.subscribe({
       next: () => {
         this.saving.set(false);
-        void this.router.navigate(['/admin', resource.id]);
+        void this.router.navigate(['/platform-configuration', resource.id]);
       },
       error: (err) => {
         this.saving.set(false);

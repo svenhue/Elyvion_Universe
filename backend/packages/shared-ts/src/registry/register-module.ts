@@ -21,7 +21,11 @@ export async function registerModule(
   retries = 5,
   delayMs = 2000,
 ): Promise<void> {
-  const { registryUrl, ...payload } = options;
+  const { registryUrl, ...registration } = options;
+  const payload = {
+    ...registration,
+    healthCheckUrl: `${options.baseUrl.replace(/\/+$/, '')}/health`,
+  };
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {

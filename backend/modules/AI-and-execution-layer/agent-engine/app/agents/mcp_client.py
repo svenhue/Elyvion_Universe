@@ -20,13 +20,16 @@ async def mcp_session(url: str) -> AsyncIterator[ClientSession]:
             yield session
 
 
-async def list_tools_as_anthropic_schema(session: ClientSession) -> list[dict]:
+async def list_tools_as_openai_schema(session: ClientSession) -> list[dict]:
     result = await session.list_tools()
     return [
         {
-            "name": tool.name,
-            "description": tool.description or "",
-            "input_schema": tool.input_schema,
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": tool.input_schema,
+            },
         }
         for tool in result.tools
     ]

@@ -75,7 +75,7 @@ export class SecretsService {
     });
     if (!environment) throw new NotFoundException('Environment was not found for this tenant.');
     const workspace = await this.prisma.workspace.findFirst({
-      where: { id: actor.workspaceId, tenantId: actor.tenantId },
+      where: { id: actor.workspaceId, tenantId: actor.tenantId, status: 'active' },
     });
     if (!workspace) throw new NotFoundException('Workspace was not found for this tenant.');
 
@@ -340,6 +340,14 @@ export class SecretsService {
     if (!isWorkloadScopedTo(actor, reference)) {
       await this.writeWorkloadAudit(scope, actor.id, reference.secretId, 'deny', 'workload_scope_mismatch');
       throw new ForbiddenException('Workload is not authorized for this secret scope.');
+    }
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: scope.workspaceId, tenantId: scope.tenantId, status: 'active' },
+      select: { id: true },
+    });
+    if (!workspace) {
+      await this.writeWorkloadAudit(scope, actor.id, reference.secretId, 'deny', 'workspace_inactive_or_missing');
+      throw new ForbiddenException('Workspace is inactive or unavailable.');
     }
     const secret = reference.secret;
     if (secret.status !== 'active' || (secret.expiresAt && secret.expiresAt <= new Date())) {

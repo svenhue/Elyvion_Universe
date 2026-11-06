@@ -295,6 +295,7 @@ async function getUserId(request: Request): Promise<string> {
     request.headers.authorization,
     process.env.AUTH_ISSUER_URL ?? 'http://localhost:3011',
     process.env.API_AUDIENCE ?? 'elyvion:api',
+    process.env.AUTH_JWKS_URL,
   );
   if (!payload.sub) throw new BadRequestException('Token has no subject.');
   return payload.sub;

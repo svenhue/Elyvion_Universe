@@ -10,10 +10,11 @@ past the gateway proxy's timeout).
 
 ## LLM
 
-Anthropic only, via `LlmService` — no provider abstraction, since there's
-only one provider to abstract over yet. Without `ANTHROPIC_API_KEY` set,
-`POST .../messages` 503s with a clear message instead of a raw SDK
-exception. The same is true of `agent-engine` itself for `"agent"` mode.
+Chat uses the central `local-llm` module, which forwards compatible
+chat-completion requests to the globally configured Ollama instance. Agent
+mode also routes every planning and tool-use completion through `local-llm`.
+Configure only `LOCAL_LLM_URL` in this service; platform administrators
+manage the model, Ollama URL, temperature, and context size in the Admin UI.
 
 ## Endpoints
 
@@ -31,5 +32,5 @@ pnpm install
 pnpm run start:dev
 ```
 
-Needs MongoDB running (see `../../docker-compose.yml`) and the Registry
-module up so this can self-register.
+Needs MongoDB and Ollama running (see `../../docker-compose.yml`), the
+`local-llm` module, and the Registry module up so this can self-register.

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { readSecretValue } from './read-secret';
 
 export interface RegisterResourceOptions {
   securityUrl: string;
@@ -34,20 +35,23 @@ export async function registerPermission(options: RegisterPermissionOptions, ret
 }
 
 async function postWithRetry(url: string, payload: unknown, retries: number, delayMs: number, label: string): Promise<void> {
+  const operatorToken = readSecretValue('SECURITY_OPERATOR_TOKEN_FILE', 'SECURITY_OPERATOR_TOKEN');
+  if (!operatorToken) {
+    throw new Error('SECURITY_OPERATOR_TOKEN or SECURITY_OPERATOR_TOKEN_FILE must be configured.');
+  }
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await axios.post(url, payload, {
         timeout: 3000,
-        headers: process.env.SECURITY_OPERATOR_TOKEN
-          ? { 'x-security-operator-token': process.env.SECURITY_OPERATOR_TOKEN }
-          : {},
+        headers: { 'x-security-operator-token': operatorToken },
       });
       return;
     } catch (err) {
       if (attempt === retries) {
         const message = `[registerAuthorization] Failed to register "${label}" at ${url} after ${retries} attempts`;
         console.error(message, err instanceof Error ? err.message : err);
-        throw new Error(message, { cause: err });
+        throw new Error(message);
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

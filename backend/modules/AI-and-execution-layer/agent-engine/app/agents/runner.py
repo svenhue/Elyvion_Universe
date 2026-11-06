@@ -13,13 +13,14 @@ note): those only let the developer *choose among* pre-authored roles,
 never design new ones per task the way `planner.design_team` does.
 """
 
+import json
 from typing import Any, TypedDict
 
-from anthropic import AsyncAnthropic
 from langgraph.graph import END, StateGraph
 from mcp import ClientSession
 
 from .mcp_client import call_tool
+from .llm_client import chat_completion
 from .schemas import AgentRole, AgentStepResult, TeamSpec
 
 _MAX_TOOL_ITERATIONS = 5
@@ -32,8 +33,7 @@ class GraphState(TypedDict):
 
 
 async def _run_agent_step(
-    client: AsyncAnthropic,
-    model: str,
+    llm_url: str,
     session: ClientSession,
     tools: list[dict],
     role: AgentRole,
@@ -45,29 +45,42 @@ async def _run_agent_step(
         if previous_output is None
         else f"Aufgabe: {task}\n\nBisheriges Ergebnis des vorherigen Agenten:\n{previous_output}"
     )
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_content}]
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": role.system_prompt},
+        {"role": "user", "content": user_content},
+    ]
     tool_calls: list[str] = []
 
     for _ in range(_MAX_TOOL_ITERATIONS):
-        response = await client.messages.create(
-            model=model,
-            max_tokens=1024,
-            system=role.system_prompt,
-            tools=tools,
-            messages=messages,
-        )
-        if response.stop_reason != "tool_use":
-            text = "".join(block.text for block in response.content if block.type == "text")
-            return AgentStepResult(agent_name=role.name, output=text, tool_calls=tool_calls)
+        response = await chat_completion(llm_url, messages, tools=tools)
+        calls = response.get("tool_calls") or []
+        if not calls:
+            return AgentStepResult(
+                agent_name=role.name,
+                output=response.get("content") or "",
+                tool_calls=tool_calls,
+            )
 
-        messages.append({"role": "assistant", "content": response.content})
-        tool_results = []
-        for block in response.content:
-            if block.type == "tool_use":
-                tool_calls.append(block.name)
-                output = await call_tool(session, block.name, block.input)
-                tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": output})
-        messages.append({"role": "user", "content": tool_results})
+        messages.append({
+            "role": "assistant",
+            "content": response.get("content") or "",
+            "tool_calls": calls,
+        })
+        for call in calls:
+            function = call.get("function", {})
+            name = function.get("name")
+            arguments = function.get("arguments", {})
+            if isinstance(arguments, str):
+                arguments = json.loads(arguments)
+            if not isinstance(name, str) or not isinstance(arguments, dict):
+                raise RuntimeError("Local LLM returned an invalid action call.")
+            tool_calls.append(name)
+            output = await call_tool(session, name, arguments)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call["id"],
+                "content": output,
+            })
 
     return AgentStepResult(
         agent_name=role.name,
@@ -78,13 +91,12 @@ async def _run_agent_step(
 
 def _make_node(
     role: AgentRole,
-    client: AsyncAnthropic,
-    model: str,
+    llm_url: str,
     session: ClientSession,
     tools: list[dict],
 ):
     async def node(state: GraphState) -> dict:
-        result = await _run_agent_step(client, model, session, tools, role, state["task"], state["last_output"])
+        result = await _run_agent_step(llm_url, session, tools, role, state["task"], state["last_output"])
         return {"steps": [*state["steps"], result], "last_output": result.output}
 
     return node
@@ -92,15 +104,14 @@ def _make_node(
 
 def build_graph(
     team: TeamSpec,
-    client: AsyncAnthropic,
-    model: str,
+    llm_url: str,
     session: ClientSession,
     tools: list[dict],
 ):
     graph = StateGraph(GraphState)
     previous_name: str | None = None
     for role in team.agents:
-        graph.add_node(role.name, _make_node(role, client, model, session, tools))
+        graph.add_node(role.name, _make_node(role, llm_url, session, tools))
         if previous_name is None:
             graph.set_entry_point(role.name)
         else:

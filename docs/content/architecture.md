@@ -40,19 +40,11 @@ Vollständiger OpenID-Connect-Provider (`oidc-provider`), kein Eigenbau von Kryp
 - Redirect-URIs sind pro Client explizit als Allowlist registriert (`src/oidc/clients.ts`) – nicht verhandelbar zur Laufzeit
 - Access Tokens sind **selbstständige JWTs** (RFC 9068, `at+jwt`) statt opaker Referenz-Tokens – über ein Resource Indicator (RFC 8707) mit fester Audience `API_AUDIENCE` (Default `elyvion:api`), die Gateway und Module beim Verifizieren prüfen (`verifyBearerToken(..., audience)`)
 
-Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`). Auth hält **keine eigenen Nutzerdaten** mehr — `findAccount()` und die Credential-Prüfung beim Login rufen direkt (nicht über das Gateway) den `users`-Service auf; dieser ist die alleinige Quelle für Nutzer/Rollen/Rechte.
+Login/Consent laufen über einfache, serverseitig gerenderte Interaction-Routen (`/interaction/:uid`). Auth hält keine eigenen Nutzerdaten; `findAccount()` und die Credential-Prüfung rufen intern den Security-Service auf.
 
 ### Registry (`backend/modules/registry`)
 
 Persistenter Modul-Katalog (Postgres via Prisma). Jedes Modul registriert sich beim Start selbst (`POST /modules/register`); ein Cronjob pingt alle `healthCheckUrl`s alle 30 Sekunden und aktualisiert den Status (`healthy` / `unhealthy`).
-
-### Users (`backend/modules/security-layer/users`)
-
-Postgres/Prisma, einfaches RBAC-Modell (`User`/`Role`/`Permission` + Join-Tabellen). Endpunkte:
-
-- `POST /register` — **öffentlich über das Gateway** (`/api/users/register`, allowlisted in `modules/gateway`), da ein neuer Account noch kein Token hat
-- `POST /verify-credentials`, `GET /by-id/:id` — **intern**, nur von `modules/auth` direkt aufgerufen, nie über das Gateway
-- `GET/POST /roles`, `/permissions`, `POST /roles/:roleId/permissions/:permissionId`, `POST /users/:userId/roles/:roleId` — Rechteverwaltung
 
 ### App-Config (`backend/modules/resource-layer/app-config`)
 
@@ -95,8 +87,8 @@ zur Verwaltung deploybarer Ressourcen-Bündel.
 
 ### Security-Layer (`backend/modules/security-layer`)
 
-Gruppiert `auth` für OpenID Connect, `security` für Autorisierung und `users`
-für Nutzer, Rollen und Berechtigungen. Die Services bleiben separat registriert.
+Gruppiert `auth` für OpenID Connect und `security` als einzige Quelle für
+Nutzer, Mandanten, Rollen, Berechtigungen, Secret-Verwaltung und Autorisierung.
 
 ### Development-Layer (`backend/modules/development-layer`)
 

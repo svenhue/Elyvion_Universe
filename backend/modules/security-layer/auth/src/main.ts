@@ -8,6 +8,7 @@ import { createOidcProvider } from './oidc/provider.factory';
 async function bootstrap() {
   const port = Number(process.env.PORT ?? 3011);
   const issuerUrl = process.env.AUTH_ISSUER_URL ?? `http://localhost:${port}`;
+  const baseUrl = process.env.MODULE_BASE_URL ?? issuerUrl;
   const registryUrl = process.env.REGISTRY_URL ?? 'http://localhost:3010';
 
   const provider = await createOidcProvider(issuerUrl);
@@ -41,7 +42,7 @@ async function bootstrap() {
     registryUrl,
     name: 'auth',
     type: 'ts',
-    baseUrl: issuerUrl,
+    baseUrl,
     routePrefix: '/',
     healthCheckUrl: `http://localhost:${port}/health`,
     version: '0.1.0',

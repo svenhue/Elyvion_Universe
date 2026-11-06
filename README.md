@@ -14,13 +14,13 @@ Details zu jedem Bereich stehen im jeweiligen Unterordner-README sowie ausführl
 
 ## Quickstart
 
-Ein Befehl, direkt nach dem Klonen — startet Infra-Container, installiert alle Abhängigkeiten (Backend-Workspace + Python-Services), wendet offene Prisma-Migrationen an und startet jedes Backend-Modul sowie das Frontend im Hintergrund:
+Ein Befehl, direkt nach dem Klonen — startet Infrastruktur und alle Backend-Anwendungsdienste als Docker-Container, installiert die Abhängigkeiten, wendet offene Prisma-Migrationen auf der Compose-Postgres an und startet den Angular-Client als Host-Entwicklungsserver:
 
 ```bash
 ./scripts/dev-up.sh
 ```
 
-Voraussetzungen: `docker`, `node` (≥20), `pnpm`, `npm`, `uv`. Das Skript prüft diese selbst und bricht mit einer klaren Meldung ab, falls etwas fehlt.
+Voraussetzungen: Docker mit Compose, `node` (≥20), `pnpm` und `npm`. Python-Services werden ebenfalls als Container gebaut; `uv` muss nicht auf dem Host installiert sein. Fehlende lokale Runtime-Tokens werden zufällig erzeugt und mit eingeschränkten Dateirechten unter `backend/.secrets/` gespeichert.
 
 Danach:
 
@@ -30,32 +30,20 @@ Danach:
 - Adminer (Postgres): http://localhost:8081
 - Neo4j Browser: http://localhost:7474
 
-Logs liegen unter `.dev-run/logs/<service>.log` (gitignored). Alles wieder stoppen:
+Der Frontend-Log liegt unter `.dev-run/logs/client.log` (gitignored); Backend-Logs lassen sich mit `cd backend && docker compose logs -f <service>` ansehen. Alles wieder stoppen (Postgres und die übrige Infrastruktur bleiben standardmäßig erhalten; die Datenbank-Volumes werden auch mit `--with-infra` nicht gelöscht):
 
 ```bash
 ./scripts/dev-down.sh            # stoppt alle Services, lässt die Infra-Container laufen
-./scripts/dev-down.sh --with-infra  # stoppt zusätzlich Postgres/Mongo/Redis/Neo4j
+./scripts/dev-down.sh --with-infra  # stoppt zusätzlich alle Compose-Container, Daten bleiben erhalten
 ```
 
-Das Skript ist absichtlich ein einfaches Shell-Skript und keine Infrastructure-as-Code-Lösung über die Deployment-Engine — die Deployment-Engine baut und betreibt *kompilierte* Artefakte gegen ein Ziel (lokal Docker, später Cloud-Provider); hier geht es um das Hochfahren der eigenen, Quellcode-basierten Dev-Services mit Hot-Reload, nicht um ein Deployment.
+Das Skript ist absichtlich ein einfaches Shell-Skript und keine Infrastructure-as-Code-Lösung über die Deployment-Engine — die Deployment-Engine baut und betreibt *kompilierte* Artefakte gegen ein Ziel (lokal Docker, später Cloud-Provider); hier geht es um das Hochfahren der eigenen Entwicklungsumgebung. Backend-Code läuft in Compose-Containern, der Angular-Client lokal mit Live-Reload.
 
-### Manuell, Modul für Modul
+### Manueller Start
 
 ```bash
-# Backend-Infrastruktur starten
-cd backend && docker compose up -d
-
-# Alle TypeScript-Backend-Services im Dev-Modus starten (Turborepo)
-pnpm install && pnpm dev
-
-# Python-Module (agent-engine, knowledge-layer/ontology-engine) einzeln, z. B.
-cd modules/knowledge-layer/ontology-engine && uv sync && uv run uvicorn app.main:app --reload
-
-# Doku-Website
-cd ../../docs && npm install && npm run dev
-
-# Frontend
-cd ../frontend && npm install && npm run build:lib && npm start
+# Backend-Migrationen anwenden und alle Backend-Container sowie den Client starten
+./scripts/dev-up.sh
 ```
 
 Siehe [`backend/README.md`](backend/README.md), [`docs/README.md`](docs/README.md) und [`frontend/README.md`](frontend/README.md) für Details.

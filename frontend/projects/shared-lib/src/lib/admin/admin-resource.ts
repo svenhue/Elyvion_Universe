@@ -20,7 +20,7 @@ export interface AdminField {
  * provideAdminResources() in a host app for the concrete list.
  */
 export interface AdminResourceConfig {
-  /** Used in the route (/admin/:id) and as the React-key-like identity in nav. */
+  /** Used in the route (/platform-configuration/:id) and as the identity in nav. */
   id: string;
   label: string;
   moduleName: string;

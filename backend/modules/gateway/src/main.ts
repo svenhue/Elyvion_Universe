@@ -4,20 +4,31 @@ import * as express from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { RegistryCacheService } from './registry/registry-cache.service';
-import { createProxyMiddleware, PublicRouteAllowlist } from './proxy/proxy.middleware';
+import { createProxyMiddleware, PublicRouteAllowlist, RouteAlias } from './proxy/proxy.middleware';
 
 // New accounts have no token yet — these are the only /api/{module}{path}
 // combinations reachable without a Bearer JWT. Keep this list short and
 // explicit; everything else stays behind auth by default.
 const PUBLIC_ROUTES: PublicRouteAllowlist = {
-  users: ['/register'],
+  security: ['/register'],
 };
+
+const ROUTE_ALIASES: RouteAlias[] = [
+  {
+    sourceModule: 'users',
+    sourcePath: '/register',
+    targetModule: 'security',
+    targetPath: '/register',
+    method: 'POST',
+  },
+];
 
 async function bootstrap() {
   const port = Number(process.env.PORT ?? 3000);
   const baseUrl = process.env.MODULE_BASE_URL ?? `http://localhost:${port}`;
   const registryUrl = process.env.REGISTRY_URL ?? 'http://localhost:3010';
   const authIssuerUrl = process.env.AUTH_ISSUER_URL ?? 'http://localhost:3011';
+  const authJwksUrl = process.env.AUTH_JWKS_URL;
   const apiAudience = process.env.API_AUDIENCE ?? 'elyvion:api';
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -32,7 +43,7 @@ async function bootstrap() {
   app.use(
     '/api',
     express.json(),
-    createProxyMiddleware(registryCache, authIssuerUrl, apiAudience, PUBLIC_ROUTES),
+    createProxyMiddleware(registryCache, authIssuerUrl, apiAudience, PUBLIC_ROUTES, ROUTE_ALIASES, authJwksUrl),
   );
 
   await app.listen(port);

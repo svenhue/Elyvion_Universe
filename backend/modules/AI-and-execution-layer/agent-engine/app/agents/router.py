@@ -1,13 +1,12 @@
 import asyncio
 from datetime import datetime, timezone
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..config import settings
 from . import prompts, store
-from .mcp_client import list_tools_as_anthropic_schema, mcp_session
+from .mcp_client import list_tools_as_openai_schema, mcp_session
 from .planner import design_team
 from .prompts import PromptDef
 from .runner import build_graph
@@ -35,9 +34,6 @@ async def update_prompt(key: str, payload: UpdatePromptRequest) -> PromptDef:
 
 @router.post("/runs", status_code=202)
 async def create_run(payload: RunRequest) -> RunResult:
-    if not settings.anthropic_api_key:
-        raise HTTPException(503, "ANTHROPIC_API_KEY ist nicht gesetzt — agent-engine kann noch nicht laufen.")
-
     run = RunResult(task=payload.task)
     store.save(run)
     asyncio.create_task(_execute_run(run.id))
@@ -69,14 +65,13 @@ async def _execute_run(run_id: str) -> None:
         return
 
     try:
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        team = await design_team(client, settings.anthropic_model, run.task)
+        team = await design_team(settings.local_llm_url, run.task)
         run.team = team
         run.updated_at = datetime.now(timezone.utc)
 
         async with mcp_session(settings.actions_engine_mcp_url) as session:
-            tools = await list_tools_as_anthropic_schema(session)
-            graph = build_graph(team, client, settings.anthropic_model, session, tools)
+            tools = await list_tools_as_openai_schema(session)
+            graph = build_graph(team, settings.local_llm_url, session, tools)
             async for update in graph.astream(
                 {"task": run.task, "steps": [], "last_output": None}, stream_mode="updates"
             ):

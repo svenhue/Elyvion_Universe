@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ADMIN_RESOURCES } from './admin-resource';
+import { ADMIN_NAV_ITEMS } from './admin-navigation';
 
 /**
  * Sidebar of every configured resource (one per DB table/collection) +
@@ -14,7 +15,7 @@ import { ADMIN_RESOURCES } from './admin-resource';
   template: `
     <div class="elv-admin">
       <nav class="elv-admin__nav">
-        <h1>Admin</h1>
+        <h1>Plattformkonfiguration</h1>
         @for (resource of resources; track resource.id) {
           <a [routerLink]="[resource.id]" routerLinkActive="elv-admin__nav-link--active">
             {{ resource.label }}
@@ -23,6 +24,13 @@ import { ADMIN_RESOURCES } from './admin-resource';
         <a [routerLink]="['platform-environment']" routerLinkActive="elv-admin__nav-link--active">
           Platform-Umgebung
         </a>
+        @for (item of navigationItems; track item.id) {
+          @if (item.isVisible()) {
+            <a [routerLink]="[item.id]" routerLinkActive="elv-admin__nav-link--active">
+              {{ item.label }}
+            </a>
+          }
+        }
       </nav>
       <main class="elv-admin__content">
         <router-outlet />
@@ -73,4 +81,5 @@ import { ADMIN_RESOURCES } from './admin-resource';
 })
 export class AdminShellComponent {
   protected readonly resources = inject(ADMIN_RESOURCES);
+  protected readonly navigationItems = inject(ADMIN_NAV_ITEMS);
 }

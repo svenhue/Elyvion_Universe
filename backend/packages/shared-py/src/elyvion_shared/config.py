@@ -13,3 +13,5 @@ class BaseModuleSettings(BaseSettings):
     registry_url: str
     auth_issuer_url: str
     environment: str = "development"
+    traffic_ingest_url: str = "http://localhost:3025/internal/events"
+    traffic_ingest_token_file: str = "/run/secrets/traffic_ingest_token"

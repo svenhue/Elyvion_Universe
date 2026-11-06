@@ -1,9 +1,34 @@
-# Security authorization service
+# Security service
 
-The Security service is the source of truth for tenant-scoped permissions.
-It evaluates authorization decisions and records them in its audit table.
-The Users service owns tenants and active memberships; Security validates
-membership there for each decision.
+The Security service is the single source of truth for users, tenants,
+tenant memberships, roles, permissions, secrets, and authorization. Accounts
+and tenant data live in the `security` PostgreSQL schema; there is no
+separate Users service or `users` schema.
+
+## Local Docker services
+
+From `backend/`, start PostgreSQL and the Security Layer services with:
+
+```sh
+docker compose up -d postgres security auth
+```
+
+The containers connect to PostgreSQL at `postgres:5432` on the Compose
+network. Host-run development modules use `localhost:5433`; this avoids
+colliding with a PostgreSQL server already bound to the host's port `5432`.
+Adminer remains available at `http://localhost:8081` and should connect to
+the server named `postgres`, database `elyvion`.
+
+Auth and Security are built from the backend pnpm workspace. Auth uses the
+Security service for credential verification and account lookup via
+`SECURITY_INTERNAL_TOKEN`; those internal routes are not public API routes.
+The OIDC issuer remains `http://localhost:3011` for browser clients.
+
+Local-only Docker credentials are mounted from `backend/.secrets/`. That
+directory is ignored by Git; do not commit or share its contents. The
+Security container fails closed if its encryption key or workload registry
+is missing. Never add a placeholder workload identity just to make startup
+succeed.
 
 ## Decision endpoint
 
@@ -32,10 +57,11 @@ decision.
 
 ## Authorization model
 
-- Tenants and active/inactive memberships are owned by the Users service.
+- Tenants, accounts, and active/inactive memberships are owned by Security.
 - Role assignments and object permissions are scoped to a tenant.
-- `tenant-admin` and `developer` are seeded roles; no platform-admin role is
-  implicitly granted.
+- `admin`, `tenant-admin`, and `developer` are seeded roles. The
+  platform-configuration and workspace-management UI permissions are
+  evaluated through this PDP, not inferred from JWT claims.
 - Data permissions may include row filters, column masking, and row limits.
 - Old unscoped assignments remain in the database but are not effective.
 - Audit stores minimized decision data. An audit-write failure prevents an
@@ -43,25 +69,16 @@ decision.
 
 ## Bootstrap and migration
 
-1. Apply the Users and Security Prisma migrations.
-2. Set `TENANT_BOOTSTRAP_TOKEN` in Users and `SECURITY_OPERATOR_TOKEN` in
-   Security; keep both operator-only.
-3. Use `POST /operator/tenants/bootstrap` in Users with
-   `x-operator-token` to create a tenant and its initial membership.
+1. Apply the Security Prisma migrations. The consolidation migration copies
+   existing users, tenants, memberships, and legacy role grants from the
+   former `users` schema before dropping that schema.
+2. Set `SECURITY_OPERATOR_TOKEN`; keep it operator-only.
+3. Use `POST /operator/tenants/bootstrap` in Security with
+   `x-security-operator-token` to create a tenant and its initial membership.
 4. Assign `tenant-admin` using Security's
    `POST /operator/tenant-assignments` with `x-operator-token`.
-5. Add further memberships through Users, then assign each user's
+5. Add further memberships through Security, then assign each user's
    tenant-scoped role through Security.
-6. To import legacy role/permission data, provide an explicit mapping file
-   and run `pnpm --filter security authz:migrate-legacy` with
-   `USERS_DATABASE_URL`, `DATABASE_URL`, and `LEGACY_AUTH_MAPPING_FILE`.
-   Legacy users must already have active membership in the explicitly
-   mapped tenant. Unscoped MongoDB records require a separate explicit
-   migration; they are not assigned automatically.
-
-The mapping file format and script options are documented in
-`prisma/migrate-legacy-authorization.ts`. Test migrations and mappings
-against disposable databases before production use.
 
 ## Operator-protected endpoints
 
@@ -70,12 +87,36 @@ object-permission administration require `x-operator-token` matching
 `SECURITY_OPERATOR_TOKEN`. Runtime PEP calls use `/v1/authorize` and do not
 use the operator token.
 
-ABAC policies, richer relationship models, audit retention/reporting,
-tenant-administration UI, and a frontend tenant-selection state are not part
-of this initial RBAC slice. Frontend actions that require permission must be
-called with a selected `tenantId`; otherwise they deny. Durable workflow-run
-identity delegation is also still open; do not persist raw bearer tokens in
-workflow context.
+ABAC policies, richer relationship models, audit retention/reporting, and
+tenant-administration UI are not part of this initial RBAC slice. The
+frontend obtains a user's active tenant memberships from Security
+`GET /tenants/mine`, persists the selected tenant/workspace in browser state,
+and queries the PDP for menu visibility. This is only UI state; every
+workspace mutation is independently authorized by Security. Durable
+workflow-run identity delegation is also still open; do not persist raw
+bearer tokens in workflow context.
+
+## Workspace management
+
+Authenticated workspace operations are tenant-scoped and use the same
+Authorization Service decision path:
+
+- `GET /v1/workspaces` requires `workspace.read`.
+- `POST /v1/workspaces` requires `workspace.create`; the creator is added as
+  an active workspace member.
+- `PATCH /v1/workspaces/:id` requires `workspace.update`.
+- `DELETE /v1/workspaces/:id` requires `workspace.delete` and soft-deletes
+  the workspace, revoking its active memberships. Secret resolution also
+  rejects inactive workspaces.
+
+The `tenant-admin` role receives all four permissions; `developer` receives
+read, create, and update. The platform-configuration menu permission is
+`platform.configuration.read`; generic admin pages are mounted under
+`/platform-configuration` and protected by that PDP decision.
+
+Apply the migrations in order before using these routes. The frontend calls
+Security's `/tenants/mine` endpoint, which returns only the authenticated user's active tenant
+memberships and is not an operator endpoint.
 
 ## Data Adapter secret management
 

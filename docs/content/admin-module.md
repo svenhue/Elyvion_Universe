@@ -14,8 +14,8 @@ import { AdminResourceConfig } from '@elyvion/shared-lib';
 const roles: AdminResourceConfig = {
   id: 'roles',                 // Routensegment: /admin/roles
   label: 'Users: Rollen',      // Sidebar-Label
-  moduleName: 'users',         // Gateway-Modulname → /api/users/...
-  listPath: '/roles',          // GET /api/users/roles
+  moduleName: 'security',      // Gateway-Modulname → /api/security/...
+  listPath: '/roles',          // GET /api/security/roles
   idField: 'id',
   fields: [
     { key: 'id', label: 'ID', type: 'text', editable: false },
@@ -47,12 +47,11 @@ import { elvAdminRoutes, withElyvionAuthShell } from '@elyvion/shared-lib';
 | Resource | Modul | DB |
 |---|---|---|
 | `registry-modules` | `registry` | Postgres (nur Edit/Delete — Module registrieren sich selbst) |
-| `users` | `users` | Postgres (nur Edit/Delete — Registrierung hat eigenen Flow) |
-| `roles`, `permissions` | `users` | Postgres (volles CRUD) |
+| `roles`, `permissions` | `security` | Postgres (Authorization API; operator-protected) |
 | `app-configs` | `app-config` | MongoDB (volles CRUD, Upsert über `PUT`) |
 
 ## Grenzen (bewusst, für diesen ersten Durchlauf)
 
 - Keine Rollen-/Rechte-Prüfung auf den Admin-Endpoints — jeder eingeloggte Account kann sie aufrufen, nicht nur ein "Admin"-Account. Für produktiven Einsatz: Rolle aus dem ID-Token (`roles`-Claim, siehe [Architektur](/architecture)) prüfen, z. B. als zusätzlicher Guard auf `{ path: 'admin', ... }`.
-- `roles`/`permissions` beim Editieren eines Users sind read-only — Zuweisen/Entziehen läuft über eigene Endpoints (`POST/DELETE /api/users/users/:userId/roles/:roleId` usw., siehe [Patterns](/patterns)), nicht über das generische Formular.
+- Accounts werden im Security-Service verwaltet; Role assignments erfolgen über die tenant-scoped Authorization API (`/api/security/role-assignments`), nicht über generische CRUD-Endpoints.
 - Felder vom Typ `json` erwarten gültiges JSON im Textfeld; ungültige Eingaben zeigen einen Fehler statt zu speichern.

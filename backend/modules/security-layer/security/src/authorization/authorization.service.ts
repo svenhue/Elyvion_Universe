@@ -37,13 +37,11 @@ export interface AuthorizeResult {
 export interface AuthorizationRequest extends AuthorizeDto {
   userId: string;
   tenantId: string;
-  authorization: string;
 }
 
 @Injectable()
 export class AuthorizationService {
   private readonly logger = new Logger(AuthorizationService.name);
-  private readonly usersServiceUrl = process.env.USERS_SERVICE_URL ?? 'http://localhost:3013';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -215,7 +213,7 @@ export class AuthorizationService {
     const evaluatedPermissions = [action];
     let decision: AuthorizeResult;
 
-    const membership = await this.hasActiveMembership(request);
+    const membership = await this.hasActiveMembership(request.userId, request.tenantId);
     if (!membership) {
       decision = deny('No active membership in the selected tenant.', evaluatedPermissions);
     } else {
@@ -304,26 +302,17 @@ export class AuthorizationService {
     );
   }
 
-  private async hasActiveMembership(request: AuthorizationRequest): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.usersServiceUrl}/tenant-membership`, {
-        method: 'GET',
-        headers: {
-          authorization: request.authorization,
-          'x-tenant-id': request.tenantId,
-        },
-        signal: AbortSignal.timeout(3000),
-      });
-      if (response.status !== 200) return false;
-      const body: unknown = await response.json();
-      if (!isMembershipResponse(body)) return false;
-      return body.data.userId === request.userId && body.data.tenantId === request.tenantId;
-    } catch (error) {
-      this.logger.warn(
-        `Tenant membership validation failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return false;
-    }
+  private async hasActiveMembership(userId: string, tenantId: string): Promise<boolean> {
+    const membership = await this.prisma.tenantMembership.findFirst({
+      where: {
+        userId,
+        tenantId,
+        status: 'active',
+        tenant: { status: 'active' },
+      },
+      select: { id: true },
+    });
+    return !!membership;
   }
 
   private async hasActiveWorkspaceMembership(
@@ -352,14 +341,6 @@ export class AuthorizationService {
     if (!permission) return null;
     return permission;
   }
-}
-
-function isMembershipResponse(value: unknown): value is { data: { userId: string; tenantId: string } } {
-  if (!value || typeof value !== 'object' || !('data' in value)) return false;
-  const data = value.data;
-  return !!data && typeof data === 'object' &&
-    'userId' in data && typeof data.userId === 'string' &&
-    'tenantId' in data && typeof data.tenantId === 'string';
 }
 
 function deny(reason: string, evaluatedPermissions: string[] = []): AuthorizeResult {

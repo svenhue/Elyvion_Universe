@@ -1,40 +1,53 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { readFile } from 'node:fs/promises';
 
 export interface LlmMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-/**
- * Thin wrapper around the Anthropic SDK — the only LLM provider this talks
- * to for now (a provider abstraction isn't worth it until a second
- * provider is actually needed). Missing `ANTHROPIC_API_KEY` is a 503, not
- * a stack trace from deep inside the SDK — a dev environment without a
- * key configured should get a clear "why" the first time it's used.
- */
 @Injectable()
 export class LlmService {
-  private readonly client: Anthropic | null;
-  private readonly model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5';
-
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    this.client = apiKey ? new Anthropic({ apiKey }) : null;
-  }
+  private readonly endpoint =
+    `${(process.env.LOCAL_LLM_URL ?? 'http://localhost:3028').replace(/\/+$/, '')}/v1/chat/completions`;
 
   async complete(history: LlmMessage[]): Promise<string> {
-    if (!this.client) {
-      throw new ServiceUnavailableException(
-        'ANTHROPIC_API_KEY ist nicht gesetzt — der Chat kann noch nicht mit einem LLM sprechen.',
-      );
+    const tokenFile = process.env.LOCAL_LLM_SERVICE_TOKEN_FILE;
+    if (!tokenFile) {
+      throw new ServiceUnavailableException('Local LLM service credentials are not configured.');
     }
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 1024,
-      messages: history.map((message) => ({ role: message.role, content: message.content })),
-    });
-    const block = response.content[0];
-    return block?.type === 'text' ? block.text : '';
+    let token: string;
+    try {
+      token = (await readFile(tokenFile, 'utf8')).trim();
+    } catch {
+      throw new ServiceUnavailableException('Local LLM service credentials are unavailable.');
+    }
+    if (!token) throw new ServiceUnavailableException('Local LLM service credentials are empty.');
+
+    let response: Response;
+    try {
+      response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ messages: history }),
+        signal: AbortSignal.timeout(300_000),
+      });
+    } catch {
+      throw new ServiceUnavailableException('Local LLM is unavailable.');
+    }
+    if (!response.ok) throw new ServiceUnavailableException('Local LLM request failed.');
+    const result: unknown = await response.json();
+    if (!result || typeof result !== 'object' || !('choices' in result) || !Array.isArray(result.choices)) {
+      throw new ServiceUnavailableException('Local LLM returned an invalid response.');
+    }
+    const first = result.choices[0];
+    if (!first || typeof first !== 'object' || !('message' in first) || !first.message ||
+      typeof first.message !== 'object' || !('content' in first.message) || typeof first.message.content !== 'string') {
+      throw new ServiceUnavailableException('Local LLM returned an invalid response.');
+    }
+    return first.message.content;
   }
 }

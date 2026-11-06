@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { readSecretValue } from '@elyvion/shared';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { CheckAuthorizationOptions } from '@elyvion/shared';
@@ -65,7 +66,7 @@ export class RemoteActionsService {
       'authorization' | 'tenantId' | 'workspaceId' | 'environmentId'
     >,
   ): Promise<unknown> {
-    const taskToken = process.env.WORKFLOW_TASK_TOKEN;
+    const taskToken = readSecretValue('WORKFLOW_TASK_TOKEN_FILE', 'WORKFLOW_TASK_TOKEN');
     if (!taskToken) {
       throw new ServiceUnavailableException('WORKFLOW_TASK_TOKEN is not configured.');
     }

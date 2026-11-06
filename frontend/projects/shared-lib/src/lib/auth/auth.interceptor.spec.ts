@@ -68,4 +68,22 @@ describe('createAuthInterceptor', () => {
     expect(refreshAccessToken).not.toHaveBeenCalled();
     expect(result).toEqual(jasmine.any(HttpErrorResponse));
   });
+
+  it('sends public account registration without a token and does not refresh on failure', () => {
+    let result: unknown;
+    const url = 'http://localhost:3000/api/security/register';
+    http.post(url, { email: 'admin@example.test', password: 'passphrase' }).subscribe({
+      error: (error: unknown) => (result = error),
+    });
+
+    const request = httpTesting.expectOne(url);
+    expect(request.request.headers.has('Authorization')).toBeFalse();
+    request.flush(
+      { error: { statusCode: 401, message: 'Invalid or expired token' } },
+      { status: 401, statusText: 'Unauthorized' },
+    );
+
+    expect(refreshAccessToken).not.toHaveBeenCalled();
+    expect(result).toEqual(jasmine.any(HttpErrorResponse));
+  });
 });

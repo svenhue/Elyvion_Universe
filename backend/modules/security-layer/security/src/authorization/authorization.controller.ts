@@ -150,6 +150,7 @@ export class AuthorizationController {
         request.headers.authorization,
         process.env.AUTH_ISSUER_URL ?? 'http://localhost:3011',
         process.env.API_AUDIENCE ?? 'elyvion:api',
+        process.env.AUTH_JWKS_URL,
       );
       userId = payload.sub;
     } catch {
@@ -162,7 +163,6 @@ export class AuthorizationController {
       ...parsed.data,
       userId,
       tenantId,
-      authorization: request.headers.authorization ?? '',
       context: {
         ...parsed.data.context,
         requestId: parsed.data.context.requestId ??

@@ -13,6 +13,7 @@ describe('SecretsService', () => {
     environment: { findFirst: jest.Mock };
     workspace: { findFirst: jest.Mock };
     secretReference: { findFirst: jest.Mock };
+    secret: { findFirst: jest.Mock };
     rolePermission: { findMany: jest.Mock };
     auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
@@ -22,7 +23,7 @@ describe('SecretsService', () => {
     secretStore: { upsert: jest.Mock };
     secretAccessLog: { create: jest.Mock };
     auditLog: { create: jest.Mock };
-    secret: { create: jest.Mock };
+    secret: { create: jest.Mock; update: jest.Mock };
   };
   const previousKeysFile = process.env.SECRET_STORE_KEYS_FILE;
   const previousActiveVersion = process.env.SECRET_STORE_ACTIVE_KEY_VERSION;
@@ -51,12 +52,14 @@ describe('SecretsService', () => {
           updatedAt: new Date('2026-01-01T00:00:00.000Z'),
           references: [{ canonicalPath: data.canonicalPath }],
         })),
+        update: jest.fn(),
       },
     };
     prisma = {
       environment: { findFirst: jest.fn().mockResolvedValue({ id: 'environment-dev', tenantId: 'tenant-a' }) },
-      workspace: { findFirst: jest.fn().mockResolvedValue({ id: 'workspace-a', tenantId: 'tenant-a' }) },
+      workspace: { findFirst: jest.fn().mockResolvedValue({ id: 'workspace-a', tenantId: 'tenant-a', status: 'active' }) },
       secretReference: { findFirst: jest.fn() },
+      secret: { findFirst: jest.fn() },
       rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn((callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction)),
@@ -168,6 +171,104 @@ describe('SecretsService', () => {
       }),
     );
   });
+
+  it('scopes secret lookup to the requested tenant and audits an inaccessible reference', async () => {
+    prisma.secretReference.findFirst.mockResolvedValue(null);
+    const scope: SecretScope & { reference: string } = {
+      tenantId: 'tenant-b',
+      environmentId: 'environment-dev',
+      workspaceId: 'workspace-a',
+      adapterId: 'adapter-a',
+      reference: 'vault://tenants/tenant-b/environments/environment-dev/data-adapters/adapter-a/headers/apiKey',
+    };
+
+    await expect(service.resolve(workloadIdentity, scope)).rejects.toThrow('Secret reference was not found.');
+
+    expect(prisma.secretReference.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId: 'tenant-b',
+          environmentId: 'environment-dev',
+          workspaceId: 'workspace-a',
+          adapterId: 'adapter-a',
+        }),
+      }),
+    );
+    expect(transaction.secretAccessLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ outcome: 'deny', reason: 'reference_not_found' }),
+      }),
+    );
+  });
+
+  it('does not resolve a disabled secret', async () => {
+    prisma.secretReference.findFirst.mockResolvedValue({
+      tenantId: 'tenant-a',
+      environmentId: 'environment-dev',
+      workspaceId: 'workspace-a',
+      adapterId: 'adapter-a',
+      secretId: 'secret-1',
+      secret: { id: 'secret-1', status: 'disabled', expiresAt: null },
+    });
+    await expect(service.resolve(workloadIdentity, resolveScope)).rejects.toThrow('Secret is inactive or expired.');
+
+    expect(roles.effectiveRoleIds).not.toHaveBeenCalled();
+    expect(transaction.secretAccessLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ outcome: 'deny', reason: 'secret_inactive_or_expired' }),
+      }),
+    );
+  });
+
+  it('does not resolve secrets for a deleted workspace', async () => {
+    prisma.secretReference.findFirst.mockResolvedValue({
+      tenantId: 'tenant-a',
+      environmentId: 'environment-dev',
+      workspaceId: 'workspace-a',
+      adapterId: 'adapter-a',
+      secretId: 'secret-1',
+      secret: { id: 'secret-1', status: 'active', expiresAt: null },
+    });
+    prisma.workspace.findFirst.mockResolvedValue(null);
+
+    await expect(service.resolve(workloadIdentity, resolveScope)).rejects.toThrow(
+      'Workspace is inactive or unavailable.',
+    );
+    expect(transaction.secretAccessLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          outcome: 'deny',
+          reason: 'workspace_inactive_or_missing',
+        }),
+      }),
+    );
+  });
+
+  it('creates a new encrypted version when rotating a secret', async () => {
+    const secret = {
+      id: 'secret-1',
+      status: 'active',
+      currentVersion: 4,
+      canonicalPath: 'vault://tenants/tenant-a/environments/environment-dev/data-adapters/adapter-a/headers.apiKey',
+      references: [{ canonicalPath: 'vault://tenants/tenant-a/environments/environment-dev/data-adapters/adapter-a/headers/apiKey' }],
+    };
+    prisma.secret.findFirst.mockResolvedValue(secret);
+    transaction.secret.update.mockResolvedValue({
+      ...secret,
+      currentVersion: 5,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      expiresAt: null,
+    });
+
+    const result = await service.rotate(actor, 'secret-1', 'rotated-secret-value');
+
+    const updateData = transaction.secret.update.mock.calls[0][0].data;
+    expect(updateData.currentVersion).toBe(5);
+    expect(updateData.versions.create.version).toBe(5);
+    expect(updateData.versions.create.ciphertext).not.toContain('rotated-secret-value');
+    expect(JSON.stringify(result)).not.toContain('rotated-secret-value');
+  });
 });
 
 const actor: SecretActor = {
@@ -176,6 +277,22 @@ const actor: SecretActor = {
   environmentId: 'environment-dev',
   workspaceId: 'workspace-a',
   adapterId: 'adapter-a',
+};
+
+const workloadIdentity: SecretWorkloadIdentity = {
+  id: 'adapter-workload',
+  tenantIds: ['tenant-a'],
+  environmentIds: ['environment-dev'],
+  workspaceIds: ['workspace-a'],
+  adapterIds: ['adapter-a'],
+};
+
+const resolveScope: SecretScope & { reference: string } = {
+  tenantId: 'tenant-a',
+  environmentId: 'environment-dev',
+  workspaceId: 'workspace-a',
+  adapterId: 'adapter-a',
+  reference: 'vault://tenants/tenant-a/environments/environment-dev/data-adapters/adapter-a/headers/apiKey',
 };
 
 function restoreEnvironment(name: string, value: string | undefined): void {

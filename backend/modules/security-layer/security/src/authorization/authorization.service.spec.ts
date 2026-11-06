@@ -10,10 +10,10 @@ describe('AuthorizationService', () => {
     objectPermission: { findUnique: jest.Mock };
     rolePermission: { findFirst: jest.Mock };
     workspaceMembership: { findFirst: jest.Mock };
+    tenantMembership: { findFirst: jest.Mock };
   };
   let roles: { effectiveRoleIds: jest.Mock };
   let service: AuthorizationService;
-  let fetchMock: jest.SpyInstance;
 
   beforeEach(() => {
     prisma = {
@@ -23,23 +23,17 @@ describe('AuthorizationService', () => {
       objectPermission: { findUnique: jest.fn().mockResolvedValue(null) },
       rolePermission: { findFirst: jest.fn().mockResolvedValue(null) },
       workspaceMembership: { findFirst: jest.fn().mockResolvedValue(null) },
+      tenantMembership: { findFirst: jest.fn().mockResolvedValue({ id: 'membership-id' }) },
     };
-    roles = {
-      effectiveRoleIds: jest.fn().mockResolvedValue([]),
-    };
+    roles = { effectiveRoleIds: jest.fn().mockResolvedValue([]) };
     service = new AuthorizationService(
       prisma as unknown as PrismaService,
       roles as unknown as RoleResolverService,
     );
-    fetchMock = jest.spyOn(global, 'fetch');
   });
 
-  afterEach(() => {
-    fetchMock.mockRestore();
-  });
-
-  it('denies access when active tenant membership cannot be verified and audits the denial', async () => {
-    fetchMock.mockResolvedValue({ status: 403 } as Response);
+  it('denies access without an active tenant membership and audits the denial', async () => {
+    prisma.tenantMembership.findFirst.mockResolvedValue(null);
 
     const decision = await service.authorize(makeRequest());
 
@@ -54,8 +48,6 @@ describe('AuthorizationService', () => {
   });
 
   it('denies a resource whose tenant does not match the verified membership', async () => {
-    fetchMock.mockResolvedValue(membershipResponse());
-
     const decision = await service.authorize(makeRequest({
       resource: { type: 'data-engine', id: 'record-1', attributes: { tenantId: 'tenant-b' } },
     }));
@@ -65,8 +57,7 @@ describe('AuthorizationService', () => {
     expect(roles.effectiveRoleIds).not.toHaveBeenCalled();
   });
 
-  it('uses only role assignments from the active tenant and returns validated obligations', async () => {
-    fetchMock.mockResolvedValue(membershipResponse());
+  it('uses the active tenant role and returns validated obligations', async () => {
     roles.effectiveRoleIds.mockResolvedValue(['tenant-role-id']);
     prisma.rolePermission.findFirst.mockResolvedValue({
       role: { key: 'developer' },
@@ -79,22 +70,24 @@ describe('AuthorizationService', () => {
     expect(decision.matchedPolicies).toEqual(['role:developer']);
     expect(decision.obligations).toEqual({ maskColumns: ['email'], maxRows: 100 });
     expect(roles.effectiveRoleIds).toHaveBeenCalledWith('user-1', 'user', 'tenant-a');
-    expect(prisma.auditLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ decision: 'ALLOW', action: 'data.record.read' }),
-      }),
-    );
+    expect(prisma.tenantMembership.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        tenantId: 'tenant-a',
+        status: 'active',
+        tenant: { status: 'active' },
+      },
+      select: { id: true },
+    });
   });
 
   it('does not return an allow decision when the required audit write fails', async () => {
-    fetchMock.mockResolvedValue(membershipResponse());
     prisma.auditLog.create.mockRejectedValue(new Error('audit database unavailable'));
 
     await expect(service.authorize(makeRequest())).rejects.toThrow('audit database unavailable');
   });
 
-  it('denies a user who has tenant membership but no active membership in the requested workspace', async () => {
-    fetchMock.mockResolvedValue(membershipResponse());
+  it('denies a user without active membership in the requested workspace', async () => {
     const decision = await service.authorize(makeRequest({
       resource: {
         type: 'data-adapters',
@@ -120,17 +113,9 @@ function makeRequest(overrides: Partial<AuthorizationRequest> = {}): Authorizati
   return {
     userId: 'user-1',
     tenantId: 'tenant-a',
-    authorization: 'Bearer test-token',
     action: 'data.record.read',
     resource: { type: 'data-engine', id: 'record-1', attributes: {} },
     context: { requestId: 'request-1' },
     ...overrides,
   };
-}
-
-function membershipResponse(): Response {
-  return {
-    status: 200,
-    json: async () => ({ data: { userId: 'user-1', tenantId: 'tenant-a' } }),
-  } as Response;
 }

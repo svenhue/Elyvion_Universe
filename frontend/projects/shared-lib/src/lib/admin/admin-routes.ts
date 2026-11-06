@@ -6,7 +6,7 @@ import { AdminShellComponent } from './admin-shell.component';
 
 /**
  * Spread under whatever path/guard the host app wants, e.g.:
- * { path: 'admin', canActivate: [elyvionAuthGuard], children: elvAdminRoutes }
+ * { path: 'platform-configuration', canActivate: [hostAdminGuard], children: elvAdminRoutes }
  * Needs provideAdminResources() in the same injector for ADMIN_RESOURCES to resolve.
  *
  * `platform-environment` is listed before the dynamic `:resourceId` routes

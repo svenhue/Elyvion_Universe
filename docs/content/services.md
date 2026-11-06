@@ -38,14 +38,14 @@ title: Verfügbare Services
 | Auth | `3011` | OIDC-Provider (Discovery, JWKS, Login/Consent) |
 | Registry | `3010` | Modul-Katalog + Health-Checks |
 | App-Config | `3012` | Dynamic-App-Schemas (MongoDB) — `POST /schema` |
-| Users | `3013` | Nutzer/Rollen/Rechte (Postgres) — `POST /register` (öffentlich), Rest intern |
+| Security | `3022` | Nutzer, Mandanten, Rollen, Berechtigungen und Autorisierung (Postgres); `POST /register` öffentlich über das Gateway |
 | Elyvion Platform | `3030` | Gemeinsame Logging- und File-APIs (`/logs`, `/files`) |
 | Data-Layer | mehrere | `data-engine` und `data-adapters` als separat deploybare Services |
 | Knowledge-Layer | `8100` | `ontology-engine` als Graph- und Ontologie-Service |
 | Businesslogic-and-rule-layer | — | `rules-engine` zur Verwaltung und Ausführung von Geschäftsregeln |
 | AI-and-execution-layer | mehrere | `agent-engine`, `actions-engine`, `workflow-engine` und `chat` |
 | Resource-Layer | mehrere | `app-config`, `integrations` und `solutions` |
-| Security-Layer | mehrere | `auth`, `security` und `users` |
+| Security-Layer | `3011`, `3022` | `auth` und `security` (inklusive Nutzer- und Mandantenverwaltung) |
 | Development-Layer | `3021`, `3026` | `deployment-engine`, `repository` und `version-control` |
 
 Live-Status aller aktuell registrierten Module: siehe [Admin-Panel](/admin).

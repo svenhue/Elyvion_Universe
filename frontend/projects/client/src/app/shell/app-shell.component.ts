@@ -19,11 +19,13 @@ import {
   TELEMETRY_NAV_ITEM,
   WORKFLOW_NAV_ITEM,
 } from '@elyvion/shared-lib';
+import { WorkspaceAccessService } from '../workspaces/workspace-access.service';
 
 /**
  * Persistent left-hand nav (Home / App-Builder / Workflows / Ontologien /
  * AI Agents / Data / Actions), a searchable global nav dropdown above it,
- * and the floating assistant widget — wrapping every non-admin page, with
+ * and the floating assistant widget — wrapping authenticated pages,
+ * including platform configuration, with
  * a router-outlet filling the rest of the viewport. Lives in the client
  * app, not shared-lib — the route set it links to is this app's own, not
  * something a generic host app would share.
@@ -44,11 +46,13 @@ import {
 })
 export class AppShellComponent {
   private readonly navigation = inject(NavigationRegistryService);
+  protected readonly workspaceAccess = inject(WorkspaceAccessService);
 
   readonly searchQuery = signal('');
   readonly searchResults = computed(() => this.navigation.search(this.searchQuery()));
 
   constructor() {
+    void this.workspaceAccess.initialize();
     inject(FrontendActionsService).registerBuiltins();
     this.navigation.registerAll([
       { name: 'Home', url: '/' },

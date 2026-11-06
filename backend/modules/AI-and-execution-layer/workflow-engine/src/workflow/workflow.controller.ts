@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { envelope } from '@elyvion/shared';
 import { Request } from 'express';
+import { readSecretValue } from '@elyvion/shared';
 import { timingSafeEqual } from 'node:crypto';
 import { WorkflowService } from './workflow.service';
 import {
@@ -64,7 +65,7 @@ export class WorkflowController {
 
   @Post('tasks/execute')
   async executeTask(@Body() body: unknown, @Req() request: Request) {
-    const expectedTaskToken = process.env.WORKFLOW_TASK_TOKEN;
+    const expectedTaskToken = readSecretValue('WORKFLOW_TASK_TOKEN_FILE', 'WORKFLOW_TASK_TOKEN');
     const providedTaskToken = request.headers['x-workflow-task-token'];
     if (!isTokenValid(expectedTaskToken, providedTaskToken)) {
       throw new ForbiddenException('Invalid workflow task token.');

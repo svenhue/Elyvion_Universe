@@ -1,0 +1,32 @@
+FROM node:20-alpine AS build
+
+WORKDIR /workspace
+RUN apk add --no-cache openssl && corepack enable
+
+ARG MODULE_NAME
+ARG MODULE_PATH
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/shared-ts packages/shared-ts
+COPY modules modules
+
+RUN pnpm install --filter "${MODULE_NAME}..." --frozen-lockfile \
+    && pnpm --filter @elyvion/shared build \
+    && if [ -f "${MODULE_PATH}/prisma/schema.prisma" ]; then \
+         pnpm --filter "${MODULE_NAME}" exec prisma generate --schema prisma/schema.prisma; \
+       fi \
+    && pnpm --filter "${MODULE_NAME}" build
+
+FROM node:20-alpine
+
+WORKDIR /workspace
+RUN apk add --no-cache openssl
+ENV NODE_ENV=production
+
+ARG MODULE_PATH
+COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/packages/shared-ts ./packages/shared-ts
+WORKDIR /workspace/${MODULE_PATH}
+COPY --from=build /workspace/${MODULE_PATH}/ ./
+
+CMD ["node", "dist/main.js"]

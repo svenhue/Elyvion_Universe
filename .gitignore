@@ -40,3 +40,6 @@ yarn-error.log*
 
 # ./scripts/dev-up.sh runtime state (PIDs, per-service logs)
 .dev-run/
+
+# Local Docker-only credentials
+/backend/.secrets/

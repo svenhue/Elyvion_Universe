@@ -14,7 +14,7 @@ interface RegisteredUser {
 }
 
 /**
- * Plain REST form POSTing to modules/users (`POST /api/users/register`,
+ * Plain REST form POSTing to Security (`POST /api/security/register`,
  * the one Gateway route allowlisted for unauthenticated traffic) — account
  * creation is just creating a resource, not a credential grant, so unlike
  * login this can legitimately live entirely in the SPA.
@@ -111,7 +111,7 @@ export class ElvRegisterPageComponent {
     this.submitting.set(true);
     this.error.set(null);
 
-    this.api.post<RegisteredUser>('users', '/register', {
+    this.api.post<RegisteredUser>('security', '/register', {
       email: this.email,
       password: this.password,
       name: this.name || undefined,

@@ -22,7 +22,7 @@ npm start                        # baut shared-lib, dann http://localhost:4200
 - **API** (`api/*`): `ApiClientService` gegen das Gateway (`/api/{modul}/...`)
 - **UI** (`ui/*`): `ElvButtonComponent`, `ElvCardComponent`
 - **Dynamic Rendering** (`dynamic-render/*`): JSON-Schema-getriebenes Rendering kompletter Angular-Anwendungen zur Laufzeit — siehe [Doku](../docs/content/dynamic-rendering.md)
-- **Auth-Pages** (`auth-pages/*`): fertige Login-/Registrierungsseiten + `elyvionAuthGuard` + `withElyvionAuthShell(routes)` — ein Aufruf richtet `/login`, `/register`, Guard und Catch-all ein. Login startet den OIDC-Flow (`AuthService.login()`); Registrierung postet direkt gegen `modules/users` (`POST /api/users/register`, am Gateway öffentlich freigeschaltet)
+- **Auth-Pages** (`auth-pages/*`): fertige Login-/Registrierungsseiten + `elyvionAuthGuard` + `withElyvionAuthShell(routes)` — ein Aufruf richtet `/login`, `/register`, Guard und Catch-all ein. Login startet den OIDC-Flow (`AuthService.login()`); Registrierung postet direkt an den Security-Service (`POST /api/security/register`, am Gateway öffentlich freigeschaltet)
 
 ## client
 

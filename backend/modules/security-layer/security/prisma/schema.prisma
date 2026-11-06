@@ -18,6 +18,52 @@ enum AccessEffect {
   deny
 }
 
+enum TenantStatus {
+  active
+  suspended
+}
+
+enum TenantMembershipStatus {
+  active
+  invited
+  suspended
+}
+
+model User {
+  id           String             @id @default(uuid())
+  email        String             @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime           @default(now())
+  memberships  TenantMembership[]
+}
+
+model Tenant {
+  id          String             @id @default(uuid())
+  name        String
+  status      TenantStatus       @default(active)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  memberships TenantMembership[]
+
+  @@index([status, name])
+}
+
+model TenantMembership {
+  id        String                  @id @default(uuid())
+  tenantId  String
+  userId    String
+  status    TenantMembershipStatus @default(active)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId, status])
+  @@index([tenantId, status])
+}
+
 /// One backend module = one Resource — self-registered by the module
 /// itself, the same way it self-registers its actions with actions-engine.
 model Resource {
@@ -154,6 +200,7 @@ model Workspace {
   id          String               @id @default(uuid())
   tenantId    String
   name        String
+  status      String               @default("active")
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   memberships WorkspaceMembership[]

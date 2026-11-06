@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from elyvion_shared import (
     RegisterModuleOptions,
     RegisterRemoteActionOptions,
+    TrafficObservabilityMiddleware,
     configure_logging,
     get_logger,
     install_exception_handlers,
@@ -20,7 +21,12 @@ from .environment.router import router as environment_router
 from .ontologies.router import router as ontologies_router
 from .ontologies.seed import seed_platform_ontology
 
-configure_logging(settings.module_name, settings.environment)
+configure_logging(
+    settings.module_name,
+    settings.environment,
+    settings.traffic_ingest_url,
+    settings.traffic_ingest_token_file,
+)
 logger = get_logger(__name__)
 
 scheduler = AsyncIOScheduler()
@@ -192,6 +198,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.module_name, lifespan=lifespan)
+app.add_middleware(TrafficObservabilityMiddleware, module_name=settings.module_name)
 install_exception_handlers(app)
 app.include_router(ontologies_router)
 app.include_router(environment_router)

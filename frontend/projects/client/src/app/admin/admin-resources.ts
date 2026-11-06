@@ -7,6 +7,24 @@ import { AdminResourceConfig } from '@elyvion/shared-lib';
  */
 export const ADMIN_RESOURCE_CONFIGS: AdminResourceConfig[] = [
   {
+    id: 'local-llm-configuration',
+    label: 'Local LLM: Plattform-Konfiguration',
+    moduleName: 'local-llm',
+    listPath: '/configurations',
+    idField: 'scope',
+    creatable: false,
+    deletable: false,
+    updatePath: (id) => `/configurations/${id}`,
+    fields: [
+      { key: 'scope', label: 'Geltungsbereich', type: 'text', editable: false },
+      { key: 'baseUrl', label: 'Ollama URL', type: 'text', required: true },
+      { key: 'model', label: 'Modell', type: 'text', required: true },
+      { key: 'temperature', label: 'Temperatur', type: 'number', required: true },
+      { key: 'numCtx', label: 'Kontextgröße', type: 'number', required: true },
+      { key: 'updatedAt', label: 'Geändert am', type: 'text', editable: false, inList: false },
+    ],
+  },
+  {
     id: 'registry-modules',
     label: 'Registry: Module',
     moduleName: 'registry',

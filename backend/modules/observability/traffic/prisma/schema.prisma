@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider        = "postgresql"
+  url             = env("DATABASE_URL")
+  schemas          = ["traffic"]
+  relationMode     = "foreignKeys"
+}
+
+// PostgreSQL namespace is created by the initial migration.
+enum TrafficDirection {
+  client
+  server
+  @@schema("traffic")
+}
+
+enum TrafficProtocol {
+  http
+  https
+  @@schema("traffic")
+}
+
+model TrafficEvent {
+  id             String           @id @default(uuid())
+  observedAt     DateTime         @default(now())
+  direction      TrafficDirection
+  protocol       TrafficProtocol
+  sourceService  String
+  targetService  String
+  method         String
+  path           String
+  statusCode     Int?
+  requestBytes   Int?
+  responseBytes  Int?
+  durationMs     Int?
+  correlationId  String?
+  errorCode      String?
+  errorDetail    String?
+
+  @@index([observedAt])
+  @@index([sourceService, observedAt])
+  @@index([targetService, observedAt])
+  @@index([statusCode, observedAt])
+  @@schema("traffic")
+}

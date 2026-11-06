@@ -15,6 +15,14 @@ const HOP_BY_HOP_HEADERS = new Set([
 /** `{ moduleName: ['/sub/path', ...] }` — exact sub-paths reachable without a Bearer token (e.g. registration). */
 export type PublicRouteAllowlist = Record<string, string[]>;
 
+export interface RouteAlias {
+  sourceModule: string;
+  sourcePath: string;
+  targetModule: string;
+  targetPath: string;
+  method: string;
+}
+
 /**
  * Mounted at `app.use('/api', ...)`, so `req.url` has already had `/api`
  * stripped by Express. The first path segment is the target module name,
@@ -29,27 +37,37 @@ export function createProxyMiddleware(
   authIssuerUrl: string,
   apiAudience?: string,
   publicRoutes: PublicRouteAllowlist = {},
+  routeAliases: RouteAlias[] = [],
+  authJwksUrl?: string,
 ) {
   return async function proxyMiddleware(req: Request, res: Response, _next: NextFunction) {
     const correlationId = (req.headers['x-correlation-id'] as string) || randomUUID();
 
     const [, moduleName, ...rest] = req.url.split('?')[0].split('/');
     const subPath = rest.length ? `/${rest.join('/')}` : '';
+    const alias = routeAliases.find(
+      (candidate) =>
+        candidate.sourceModule === moduleName &&
+        candidate.sourcePath === subPath &&
+        candidate.method === req.method,
+    );
+    const targetModuleName = alias?.targetModule ?? moduleName;
+    const targetSubPath = alias?.targetPath ?? subPath;
 
-    const isPublic = (publicRoutes[moduleName] ?? []).includes(subPath);
+    const isPublic = (publicRoutes[targetModuleName] ?? []).includes(targetSubPath);
     if (!isPublic) {
       try {
-        await verifyBearerToken(req.headers.authorization, authIssuerUrl, apiAudience);
+        await verifyBearerToken(req.headers.authorization, authIssuerUrl, apiAudience, authJwksUrl);
       } catch {
         res.status(401).json({ error: { statusCode: 401, message: 'Invalid or expired token' } });
         return;
       }
     }
 
-    const module = registryCache.get(moduleName);
+    const module = registryCache.get(targetModuleName);
     if (!module) {
       res.status(502).json({
-        error: { statusCode: 502, message: `Unknown or unregistered module "${moduleName}"` },
+        error: { statusCode: 502, message: `Unknown or unregistered module "${targetModuleName}"` },
       });
       return;
     }
@@ -58,7 +76,7 @@ export function createProxyMiddleware(
     // routePrefix "/" means "mounted at baseUrl root" — normalize so we never
     // produce a double slash in front of subPath.
     const prefix = module.routePrefix === '/' ? '' : module.routePrefix;
-    const targetUrl = `${module.baseUrl}${prefix}${subPath}${query}`;
+    const targetUrl = `${module.baseUrl}${prefix}${targetSubPath}${query}`;
 
     // `express.json()` (mounted ahead of this middleware) only parses
     // `application/json` bodies — anything else (multipart file uploads,
@@ -81,6 +99,8 @@ export function createProxyMiddleware(
           'content-type': contentType || 'application/json',
           ...(isStreamable && req.headers['content-length'] ? { 'content-length': req.headers['content-length'] } : {}),
           'x-correlation-id': correlationId,
+          'x-elyvion-source-service': 'gateway',
+          'x-elyvion-target-service': targetModuleName,
           authorization: req.headers.authorization,
         },
         // Buffered as raw bytes, never auto-JSON-parsed — a response can be

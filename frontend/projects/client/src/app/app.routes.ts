@@ -3,6 +3,10 @@ import { elvAdminRoutes, withElyvionAuthShell } from '@elyvion/shared-lib';
 import { AuthCallbackComponent } from './auth-callback/auth-callback.component';
 import { HomeComponent } from './home/home.component';
 import { AppShellComponent } from './shell/app-shell.component';
+import { WorkspaceManagementComponent } from './workspaces/workspace-management.component';
+import { trafficRoleGuard, workspaceRoleGuard } from './workspaces/workspace-role.guard';
+
+const adminShellRoute = elvAdminRoutes[0];
 
 export const routes: Routes = [
   // OAuth redirect landing page — must stay outside the auth guard, the
@@ -78,8 +82,28 @@ export const routes: Routes = [
           path: 'repository',
           loadComponent: () => import('@elyvion/shared-lib').then((module) => module.RepositoryComponent),
         },
+        {
+          path: 'workspace-management',
+          component: WorkspaceManagementComponent,
+          canActivate: [workspaceRoleGuard],
+        },
+        {
+          path: 'platform-configuration',
+          canActivate: [workspaceRoleGuard],
+          children: [{
+            ...adminShellRoute,
+            children: [
+              {
+                path: 'observability',
+                canActivate: [trafficRoleGuard],
+                loadComponent: () => import('@elyvion/shared-lib/observability')
+                  .then((module) => module.TrafficEventsComponent),
+              },
+              ...(adminShellRoute.children ?? []),
+            ],
+          }],
+        },
       ],
     },
-    { path: 'admin', children: elvAdminRoutes },
   ]),
 ];

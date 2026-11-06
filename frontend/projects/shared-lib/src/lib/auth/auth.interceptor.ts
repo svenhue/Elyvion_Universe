@@ -12,7 +12,10 @@ export function createAuthInterceptor(apiBaseUrls: string[]): HttpInterceptorFn 
   return (req, next) => {
     const authService = inject(AuthService);
     const matchesApi = apiBaseUrls.some((base) => req.url.startsWith(base));
-    const token = matchesApi ? authService.getAccessToken() : null;
+    const isPublicRegistration =
+      req.method === 'POST' &&
+      apiBaseUrls.some((base) => req.url === `${base}/api/security/register`);
+    const token = matchesApi && !isPublicRegistration ? authService.getAccessToken() : null;
 
     const authenticatedRequest = token
       ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
@@ -20,7 +23,12 @@ export function createAuthInterceptor(apiBaseUrls: string[]): HttpInterceptorFn 
 
     return next(authenticatedRequest).pipe(
       catchError((error: unknown) => {
-        if (!matchesApi || !(error instanceof HttpErrorResponse) || error.status !== 401) {
+        if (
+          !matchesApi ||
+          isPublicRegistration ||
+          !(error instanceof HttpErrorResponse) ||
+          error.status !== 401
+        ) {
           return throwError(() => error);
         }
 

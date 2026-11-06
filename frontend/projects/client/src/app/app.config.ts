@@ -1,4 +1,4 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
+import { ApplicationConfig, inject, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
@@ -8,10 +8,13 @@ import {
   DYNAMIC_COMPONENT_REGISTRY,
   ELYVION_AUTH_CONFIG,
   ELYVION_GATEWAY_URL,
+  ADMIN_NAV_ITEMS,
   provideAdminResources,
 } from '@elyvion/shared-lib';
+import { OBSERVABILITY_TENANT_ID } from '@elyvion/shared-lib/observability';
 
 import { ADMIN_RESOURCE_CONFIGS } from './admin/admin-resources';
+import { WorkspaceAccessService } from './workspaces/workspace-access.service';
 import { routes } from './app.routes';
 
 // Per-clone config: adjust these when cloning this app for a new customer
@@ -66,5 +69,20 @@ export const appConfig: ApplicationConfig = {
       },
     },
     provideAdminResources(ADMIN_RESOURCE_CONFIGS),
+    {
+      provide: ADMIN_NAV_ITEMS,
+      useFactory: () => {
+        const access = inject(WorkspaceAccessService);
+        return [{
+          id: 'observability',
+          label: 'HTTP-Traffic',
+          isVisible: () => access.canViewTraffic(),
+        }];
+      },
+    },
+    {
+      provide: OBSERVABILITY_TENANT_ID,
+      useFactory: () => inject(WorkspaceAccessService).activeTenantId,
+    },
   ],
 };

@@ -3,8 +3,15 @@ import sys
 
 import structlog
 
+from .traffic import configure_traffic
 
-def configure_logging(module_name: str, environment: str = "development") -> None:
+
+def configure_logging(
+    module_name: str,
+    environment: str = "development",
+    traffic_ingest_url: str | None = None,
+    traffic_ingest_token_file: str | None = None,
+) -> None:
     """Structured JSON logging with a `module` field, mirroring the
     TypeScript side's pino setup so logs correlate across the platform."""
 
@@ -29,6 +36,7 @@ def configure_logging(module_name: str, environment: str = "development") -> Non
     )
 
     structlog.contextvars.bind_contextvars(module=module_name)
+    configure_traffic(module_name, traffic_ingest_url, traffic_ingest_token_file, environment)
 
 
 def get_logger(name: str | None = None):

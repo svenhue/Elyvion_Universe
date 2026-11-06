@@ -7,8 +7,8 @@ import { ElvCardComponent } from '../ui/card/card.component';
 /**
  * Doesn't collect a password itself — it starts the OAuth 2.1 + PKCE
  * Authorization Code flow against the Auth module (modules/auth), which
- * renders its own hosted login form and verifies credentials against
- * modules/users. Embedding a password field here instead would mean this
+ * renders its own hosted login form and verifies credentials with the
+ * Security service. Embedding a password field here instead would mean this
  * SPA handling raw credentials directly (the Resource Owner Password
  * grant) — exactly what the redirect-based flow avoids.
  */

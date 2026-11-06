@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 #
-# One entry point for a fresh clone: brings up every piece of the Elyvion
-# Universe platform locally — infra containers, every backend module
-# (TypeScript via Turborepo + Python via uvicorn), and the Angular client.
+# One entry point for a fresh clone: brings up the Elyvion Universe
+# infrastructure, every backend module in Docker Compose, and the Angular
+# client as a host development server.
 #
 # Deliberately a plain script, not the Deployment-Engine / Infrastructure-
-# as-Code: that module builds and runs a *compiled* artifact against a
-# target (local Docker today, a cloud provider later) — it has nothing to
-# do with orchestrating this repo's own source-level dev services with
-# hot-reload. This script is the dev-time equivalent of what a human was
-# doing by hand all session: start infra, install deps, run migrations,
-# start every module in the background, track its PID.
+# as-Code: that module builds and runs compiled artifacts against deployment
+# targets. This script prepares the local development stack, runs backend
+# services in containers, and tracks the host-based frontend process.
 #
 # Usage: ./scripts/dev-up.sh
 # Stop everything again with: ./scripts/dev-down.sh
@@ -22,11 +19,20 @@ RUN_DIR="$ROOT_DIR/.dev-run"
 LOG_DIR="$RUN_DIR/logs"
 PID_FILE="$RUN_DIR/pids"
 
-mkdir -p "$LOG_DIR"
-: > "$PID_FILE"
-
 log() { printf '\033[1;34m[dev-up]\033[0m %s\n' "$1"; }
 fail() { printf '\033[1;31m[dev-up]\033[0m %s\n' "$1" >&2; exit 1; }
+
+if [ -s "$PID_FILE" ]; then
+  while IFS=: read -r name pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    if kill -0 "$pid" 2>/dev/null; then
+      fail "development services appear to be running ($name, pid $pid); run ./scripts/dev-down.sh first."
+    fi
+  done < "$PID_FILE"
+fi
+
+mkdir -p "$LOG_DIR"
+: > "$PID_FILE"
 
 track() {
   # track <name> <pid>
@@ -50,30 +56,19 @@ for bin in docker node pnpm npm; do
   command -v "$bin" >/dev/null 2>&1 || fail "\"$bin\" is required but not found on PATH. Install it and re-run."
 done
 
-# `uv`'s own binary isn't always on PATH even when it's installed (e.g. as
-# a pip package without its console-script shim) — `python3 -m uv` works
-# in that case, so fall back to it instead of hard-failing.
-if command -v uv >/dev/null 2>&1; then
-  UV=(uv)
-elif python3 -m uv --version >/dev/null 2>&1; then
-  UV=(python3 -m uv)
-else
-  fail "\"uv\" is required (https://docs.astral.sh/uv/) but not found on PATH, not even via \"python3 -m uv\". Install it and re-run."
-fi
+# --- 1. Infrastructure containers ---
 
-# --- 1. Infra containers (Postgres, Mongo, Redis, Neo4j) ---
+log "starting infrastructure containers (Docker Compose)…"
+(cd "$ROOT_DIR/backend" && docker compose up -d postgres adminer mongo redis neo4j ollama)
 
-log "starting infra containers (docker compose)…"
-(cd "$ROOT_DIR/backend" && docker compose up -d)
-
-log "waiting for Postgres and Neo4j health checks…"
+log "waiting for the Compose PostgreSQL database and Neo4j…"
 for i in $(seq 1 60); do
   pg_ok=$(docker inspect -f '{{.State.Health.Status}}' elyvion-postgres 2>/dev/null || echo "starting")
   neo_ok=$(docker inspect -f '{{.State.Health.Status}}' elyvion-neo4j 2>/dev/null || echo "starting")
   [ "$pg_ok" = "healthy" ] && [ "$neo_ok" = "healthy" ] && break
   sleep 2
 done
-[ "$pg_ok" = "healthy" ] || log "warning: Postgres did not report healthy after 120s — continuing anyway, migrations may fail."
+[ "$pg_ok" = "healthy" ] || fail "Compose PostgreSQL did not report healthy after 120s; refusing to run database migrations."
 [ "$neo_ok" = "healthy" ] || log "warning: Neo4j did not report healthy after 120s — continuing anyway, ontology-engine may fail to connect."
 
 # --- 2. Backend: env files, dependencies, Prisma migrations ---
@@ -87,10 +82,43 @@ for module_dir in "$ROOT_DIR"/backend/modules/*/ "$ROOT_DIR"/backend/modules/*/*
   fi
 done
 
+ensure_secret_file() {
+  local secret_path="$1"
+  if [ ! -s "$secret_path" ]; then
+    mkdir -p "$(dirname "$secret_path")"
+    node - "$secret_path" <<'NODE'
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const path = process.argv[2];
+try {
+  fs.writeFileSync(path, crypto.randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
+} catch (error) {
+  if (error.code !== 'EEXIST') throw error;
+}
+NODE
+  fi
+  chmod 600 "$secret_path"
+}
+
+log "ensuring local-only runtime credentials exist as protected files…"
+ensure_secret_file "$ROOT_DIR/backend/.secrets/traffic_ingest_token"
+ensure_secret_file "$ROOT_DIR/backend/.secrets/local_llm_service_token"
+ensure_secret_file "$ROOT_DIR/backend/.secrets/workflow_task_token"
+
+log "checking host-run database URLs use the Compose PostgreSQL port (5433)…"
+for module_dir in "$ROOT_DIR"/backend/modules/*/ "$ROOT_DIR"/backend/modules/*/*/ "$ROOT_DIR"/backend/elyvion_platform/; do
+  module_dir="${module_dir%/}"
+  env_file="$module_dir/.env"
+  [ -f "$env_file" ] || continue
+  if grep -Eq '^DATABASE_URL=.*@(localhost|127\.0\.0\.1):5432/' "$env_file"; then
+    fail "$env_file still points to host PostgreSQL on port 5432; use the Compose database on port 5433."
+  fi
+done
+
 log "installing backend (pnpm workspace) dependencies…"
 (cd "$ROOT_DIR/backend" && pnpm install)
 
-PRISMA_MODULE_PATHS=(registry security-layer/users AI-and-execution-layer/workflow-engine logging security-layer/security observability/telemetry)
+PRISMA_MODULE_PATHS=(registry AI-and-execution-layer/workflow-engine logging security-layer/security observability/telemetry observability/traffic)
 for module_path in "${PRISMA_MODULE_PATHS[@]}"; do
   module_name="$(basename "$module_path")"
   module_dir="$ROOT_DIR/backend/modules/$module_path"
@@ -100,29 +128,38 @@ for module_path in "${PRISMA_MODULE_PATHS[@]}"; do
     || fail "Prisma migration failed for $module_name — check $module_dir/.env's DATABASE_URL."
 done
 
-log "syncing Python module dependencies (uv)…"
-for module_path in AI-and-execution-layer/agent-engine knowledge-layer/ontology-engine; do
-  module_name="$(basename "$module_path")"
-  module_dir="$ROOT_DIR/backend/modules/$module_path"
-  (cd "$module_dir" && "${UV[@]}" sync) || fail "uv sync failed for $module_name."
+log "building all backend service images…"
+(cd "$ROOT_DIR/backend" && docker compose --parallel 4 build) \
+  || fail "One or more backend service images failed to build."
+
+log "starting all backend services as Docker Compose containers…"
+(cd "$ROOT_DIR/backend" && docker compose up -d) \
+  || fail "One or more backend services failed to start."
+
+BACKEND_SERVICES=(
+  registry security auth gateway actions-engine app-config chat data-adapters data-engine
+  deployment-engine integrations local-llm repository rules-engine solutions telemetry traffic
+  version-control workflow-engine agent-engine ontology-engine elyvion-platform
+)
+for service in "${BACKEND_SERVICES[@]}"; do
+  container_id=$(cd "$ROOT_DIR/backend" && docker compose ps -q "$service")
+  [ -n "$container_id" ] || fail "$service container was not created."
+  healthy=false
+  for i in $(seq 1 60); do
+    status=$(docker inspect -f '{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo "starting")
+    if [ "$status" = "healthy" ]; then
+      healthy=true
+      break
+    fi
+    if [ "$status" = "unhealthy" ]; then
+      break
+    fi
+    sleep 2
+  done
+  [ "$healthy" = true ] || fail "$service did not become healthy; inspect it with docker compose logs $service."
 done
-(cd "$ROOT_DIR/backend/elyvion_platform" && "${UV[@]}" sync) \
-  || fail "uv sync failed for elyvion-platform."
 
-# --- 3. Start everything ---
-
-log "starting all TypeScript backend modules (pnpm dev, via Turborepo)…"
-(cd "$ROOT_DIR/backend" && start_bg "backend-ts" "$LOG_DIR/backend-ts.log" pnpm dev)
-
-for module_path in AI-and-execution-layer/agent-engine knowledge-layer/ontology-engine; do
-  module_name="$(basename "$module_path")"
-  module_dir="$ROOT_DIR/backend/modules/$module_path"
-  port=$(grep -h '^PORT=' "$module_dir/.env" | head -1 | cut -d= -f2)
-  (cd "$module_dir" && start_bg "$module_name" "$LOG_DIR/$module_name.log" "${UV[@]}" run uvicorn app.main:app --reload --port "$port")
-done
-port=$(grep -h '^PORT=' "$ROOT_DIR/backend/elyvion_platform/.env" | head -1 | cut -d= -f2)
-(cd "$ROOT_DIR/backend/elyvion_platform" && start_bg "elyvion-platform" "$LOG_DIR/elyvion-platform.log" "${UV[@]}" run uvicorn app.main:app --reload --port "$port")
-
+# --- 3. Start the frontend development server ---
 log "building the shared Angular library once before serving the client…"
 (cd "$ROOT_DIR/frontend" && npm install && npm run build:lib) \
   || fail "Frontend dependency install / shared-lib build failed."
@@ -137,7 +174,9 @@ log "  Client app:       http://localhost:4200"
 log "  Gateway (API):     http://localhost:3000"
 log "  Registry:          http://localhost:3010/modules"
 log "  Adminer (Postgres): http://localhost:8081"
+log "  PostgreSQL host port: 5433 (Compose service: postgres:5432)"
 log "  Neo4j Browser:      http://localhost:7474"
 log ""
-log "Logs: ${LOG_DIR#"$ROOT_DIR"/}/<name>.log   PIDs: ${PID_FILE#"$ROOT_DIR"/}"
+log "Frontend log: ${LOG_DIR#"$ROOT_DIR"/}/client.log   PIDs: ${PID_FILE#"$ROOT_DIR"/}"
+log "Backend logs: (cd backend && docker compose logs -f <service>)"
 log "Stop everything with: ./scripts/dev-down.sh"
