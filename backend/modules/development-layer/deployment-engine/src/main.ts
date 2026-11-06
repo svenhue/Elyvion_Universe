@@ -43,6 +43,11 @@ async function bootstrap() {
   await registerPermission({ securityUrl, resourceKey: moduleName, key: 'create_deployment_target', name: 'Deployment-Ziel anlegen' });
   await registerPermission({ securityUrl, resourceKey: moduleName, key: 'deploy_application', name: 'Anwendung deployen' });
   await registerPermission({ securityUrl, resourceKey: moduleName, key: 'stop_deployment', name: 'Deployment stoppen' });
+  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'development.deployment-target.create', name: 'Create deployment target' });
+  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'development.deployment-target.read', name: 'Read deployment targets' });
+  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'development.deployment.execute', name: 'Execute deployment' });
+  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'development.deployment.read', name: 'Read deployments' });
+  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'development.deployment.stop', name: 'Stop deployment' });
 
   // Exposes "deploy the application" / "check its health" / "stop it" as
   // actions — Phase 1 of the CI/CD concept (see README.md): a configurable

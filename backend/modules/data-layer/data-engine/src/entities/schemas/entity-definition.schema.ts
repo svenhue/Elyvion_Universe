@@ -70,8 +70,11 @@ export const FieldDefSchema = SchemaFactory.createForClass(FieldDef);
  */
 @Schema({ timestamps: true, collection: 'entity_definitions' })
 export class EntityDefinition {
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true })
   name!: string;
+
+  @Prop({ required: true })
+  tenantId!: string;
 
   @Prop({ type: [FieldDefSchema], required: true })
   fields!: FieldDef[];
@@ -84,3 +87,4 @@ export class EntityDefinition {
 
 export type EntityDefinitionDocument = HydratedDocument<EntityDefinition>;
 export const EntityDefinitionSchema = SchemaFactory.createForClass(EntityDefinition);
+EntityDefinitionSchema.index({ tenantId: 1, name: 1 }, { unique: true });

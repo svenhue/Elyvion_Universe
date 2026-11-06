@@ -1,5 +1,5 @@
 import { All, Controller, Req, Res } from '@nestjs/common';
-import { checkAuthorization, logEvent } from '@elyvion/shared';
+import { checkAuthorization, logEvent, redactSensitive } from '@elyvion/shared';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Request, Response } from 'express';
@@ -10,9 +10,11 @@ import { RemoteActionsService } from '../remote-actions.service';
 const LOGGING_URL = process.env.LOGGING_URL ?? 'http://localhost:3030';
 const SECURITY_URL = process.env.SECURITY_URL ?? 'http://localhost:3022';
 
-interface SubjectContext {
-  subjectId?: string;
-  subjectType?: 'user' | 'agent';
+interface AuthorizationContext {
+  authorization?: string;
+  tenantId?: string;
+  workspaceId?: string;
+  environmentId?: string;
 }
 
 /**
@@ -51,11 +53,13 @@ export class McpController {
 
   @All()
   async handle(@Req() req: Request, @Res() res: Response): Promise<void> {
-    const subject: SubjectContext = {
-      subjectId: req.headers['x-subject-id'] as string | undefined,
-      subjectType: req.headers['x-subject-type'] as 'user' | 'agent' | undefined,
+    const authorizationContext: AuthorizationContext = {
+      authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+      tenantId: typeof req.headers['x-tenant-id'] === 'string' ? req.headers['x-tenant-id'] : undefined,
+      workspaceId: typeof req.headers['x-workspace-id'] === 'string' ? req.headers['x-workspace-id'] : undefined,
+      environmentId: typeof req.headers['x-environment-id'] === 'string' ? req.headers['x-environment-id'] : undefined,
     };
-    const server = await this.buildServer(subject);
+    const server = await this.buildServer(authorizationContext);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => {
       transport.close();
@@ -65,7 +69,7 @@ export class McpController {
     await transport.handleRequest(req, res, req.body);
   }
 
-  private async buildServer(subject: SubjectContext): Promise<McpServer> {
+  private async buildServer(authorizationContext: AuthorizationContext): Promise<McpServer> {
     const server = new McpServer({ name: 'elyvion-actions-engine', version: '0.1.0' });
 
     for (const metadata of this.registry.list()) {
@@ -74,7 +78,7 @@ export class McpController {
         metadata.key,
         { title: metadata.name, description: metadata.description, inputSchema: metadata.inputSchema.shape },
         async (input: unknown) => {
-          await assertAuthorized(metadata.key, metadata.requiredPermission, subject);
+          await assertAuthorized(metadata.key, metadata.requiredPermission, authorizationContext);
           try {
             const output = await entry.handler.run(input);
             void logExecution(metadata.key, 'info', input, output);
@@ -100,12 +104,12 @@ export class McpController {
         action.key,
         { title: action.name, description: action.description, inputSchema: REMOTE_ACTION_TOOL_SHAPE },
         async (args: { input?: Record<string, unknown> }) => {
-          await assertAuthorized(action.key, action.requiredPermission, subject);
+          await assertAuthorized(action.key, action.requiredPermission, authorizationContext);
           const entry = await this.remoteActions.findOne(action.key);
           if (!entry) throw new Error(`Action "${action.key}" wurde nicht gefunden.`);
           const input = args.input ?? (args as Record<string, unknown>);
           try {
-            const output = await this.remoteActions.execute(entry, input);
+            const output = await this.remoteActions.execute(entry, input, authorizationContext);
             void logExecution(action.key, 'info', input, output);
             return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
           } catch (error) {
@@ -120,11 +124,34 @@ export class McpController {
   }
 }
 
-async function assertAuthorized(actionKey: string, requiredPermission: string | undefined, subject: SubjectContext): Promise<void> {
-  if (!requiredPermission) return;
-  const result = await checkAuthorization({ securityUrl: SECURITY_URL, requiredPermission, ...subject });
+async function assertAuthorized(
+  actionKey: string,
+  requiredPermission: string | undefined,
+  authorizationContext: AuthorizationContext,
+): Promise<void> {
+  if (!requiredPermission) {
+    void logExecution(
+      actionKey,
+      'error',
+      { tenantId: authorizationContext.tenantId, workspaceId: authorizationContext.workspaceId },
+      undefined,
+      'Action has no requiredPermission and is denied by default.',
+    );
+    throw new Error(`Action "${actionKey}" has no requiredPermission and is denied by default.`);
+  }
+  const result = await checkAuthorization({
+    securityUrl: SECURITY_URL,
+    requiredPermission,
+    ...authorizationContext,
+  });
   if (!result.allowed) {
-    void logExecution(actionKey, 'error', subject, undefined, `Autorisierung verweigert: ${result.reason}`);
+    void logExecution(
+      actionKey,
+      'error',
+      { tenantId: authorizationContext.tenantId },
+      undefined,
+      `Autorisierung verweigert: ${result.reason}`,
+    );
     throw new Error(`Nicht autorisiert für Action "${actionKey}": ${result.reason}`);
   }
 }
@@ -136,6 +163,10 @@ async function logExecution(actionKey: string, level: 'info' | 'error', input: u
     level,
     message: level === 'info' ? `Action "${actionKey}" via MCP ausgeführt.` : `Action "${actionKey}" via MCP fehlgeschlagen.`,
     actionKey,
-    context: { input, output, error: error instanceof Error ? error.message : error ? String(error) : undefined },
+    context: {
+      input: redactSensitive(input),
+      output: redactSensitive(output),
+      error: error instanceof Error ? error.name : error ? 'Action failed' : undefined,
+    },
   });
 }

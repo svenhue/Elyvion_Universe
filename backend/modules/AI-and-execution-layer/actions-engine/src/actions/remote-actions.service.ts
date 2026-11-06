@@ -1,6 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import type { CheckAuthorizationOptions } from '@elyvion/shared';
 import { RegisterRemoteActionDto } from './dto/actions.dto';
 import {
   RemoteAction,
@@ -59,7 +60,16 @@ export class RemoteActionsService {
   async execute(
     action: RemoteActionDocument,
     input: Record<string, unknown>,
+    authorizationContext: Pick<
+      CheckAuthorizationOptions,
+      'authorization' | 'tenantId' | 'workspaceId' | 'environmentId'
+    >,
   ): Promise<unknown> {
+    const taskToken = process.env.WORKFLOW_TASK_TOKEN;
+    if (!taskToken) {
+      throw new ServiceUnavailableException('WORKFLOW_TASK_TOKEN is not configured.');
+    }
+
     const workflowEngine = await this.lookupModule('workflow-engine');
     const prefix =
       workflowEngine.routePrefix === '/' ? '' : workflowEngine.routePrefix;
@@ -69,7 +79,22 @@ export class RemoteActionsService {
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-workflow-task-token': taskToken,
+        ...(authorizationContext.authorization
+          ? { authorization: authorizationContext.authorization }
+          : {}),
+        ...(authorizationContext.tenantId
+          ? { 'x-tenant-id': authorizationContext.tenantId }
+          : {}),
+        ...(authorizationContext.workspaceId
+          ? { 'x-workspace-id': authorizationContext.workspaceId }
+          : {}),
+        ...(authorizationContext.environmentId
+          ? { 'x-environment-id': authorizationContext.environmentId }
+          : {}),
+      },
       body: JSON.stringify({
         step: {
           id: action.key,

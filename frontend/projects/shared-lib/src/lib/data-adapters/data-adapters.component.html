@@ -10,6 +10,37 @@
     }
 
     <div class="mb-3 space-y-1">
+      <label class="block px-2.5 text-[10px] text-slate-500">
+        Tenant-ID
+        <input
+          class="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          [ngModel]="tenantId()"
+          (ngModelChange)="tenantId.set($event)"
+          name="tenantScope"
+        />
+      </label>
+      <label class="block px-2.5 text-[10px] text-slate-500">
+        Workspace-ID
+        <input
+          class="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          [ngModel]="workspaceId()"
+          (ngModelChange)="workspaceId.set($event)"
+          name="workspaceScope"
+        />
+      </label>
+      <label class="block px-2.5 text-[10px] text-slate-500">
+        Environment-ID
+        <input
+          class="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          [ngModel]="environmentId()"
+          (ngModelChange)="environmentId.set($event)"
+          name="environmentScope"
+        />
+      </label>
+      <button type="button" class="mx-2.5 rounded-md bg-slate-200 px-2 py-1 text-[10px]" (click)="scopeChanged()">Scope laden</button>
+    </div>
+
+    <div class="mb-3 space-y-1">
       @for (adapter of adapters(); track adapter._id) {
         <button
           type="button"
@@ -26,7 +57,7 @@
       }
     </div>
 
-    <form class="space-y-2 border-t border-slate-200 pt-3 text-xs" (ngSubmit)="createAdapter()">
+    <form class="space-y-2 border-t border-slate-200 pt-3 text-xs" (ngSubmit)="createAdapter($event)">
       <p class="font-medium text-slate-700">Neuer Adapter</p>
       <input
         class="w-full rounded-md border border-slate-200 px-2 py-1.5"
@@ -47,11 +78,39 @@
       </select>
       <textarea
         class="h-24 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px]"
-        placeholder='{"url": "..."}'
+        placeholder='{"url": "https://service.example"} — keine Zugangsdaten'
         [ngModel]="newConnectionConfig()"
         (ngModelChange)="newConnectionConfig.set($event)"
         name="newConnectionConfig"
       ></textarea>
+      <p class="text-[10px] text-slate-500">Zugangsdaten getrennt eingeben. Sie werden nach dem Speichern geleert und nie mit der Adapter-Konfiguration zurückgegeben.</p>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Secret-Name (optional)"
+        name="secretName"
+        autocomplete="off"
+      />
+      <select class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5" name="secretType">
+        <option value="api_key">API-Key</option>
+        <option value="password">Passwort</option>
+        <option value="token">Token</option>
+        <option value="private_key">Private Key</option>
+        <option value="oauth_client_secret">OAuth Client Secret</option>
+      </select>
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        placeholder="Konfigurationspfad, z. B. headers.authorization"
+        name="configKey"
+        value="headers.authorization"
+        autocomplete="off"
+      />
+      <input
+        class="w-full rounded-md border border-slate-200 px-2 py-1.5"
+        type="password"
+        placeholder="Secret-Wert (optional)"
+        name="secretValue"
+        autocomplete="new-password"
+      />
       <input
         class="w-full rounded-md border border-slate-200 px-2 py-1.5"
         placeholder="Cron-Schedule (optional, z. B. */5 * * * *)"
@@ -84,6 +143,21 @@
           </button>
         </div>
       </div>
+
+      @if (adapter.secretReferences?.length) {
+        <section class="mb-5 rounded-lg border border-slate-200 p-3" aria-label="Secret references">
+          <h3 class="mb-2 text-xs font-medium text-slate-700">Gespeicherte Zugangsdaten</h3>
+          <ul class="space-y-1">
+            @for (secret of adapter.secretReferences; track secret.id) {
+              <li class="flex items-center justify-between text-xs">
+                <span>{{ secret.name }} · {{ secret.type }} · Version {{ secret.version }}</span>
+                <span class="text-emerald-700">{{ secret.status }}</span>
+              </li>
+            }
+          </ul>
+          <p class="mt-2 text-[10px] text-slate-500">Klartext wird nicht erneut angezeigt. Referenzen bleiben in der Zielumgebung gebunden.</p>
+        </section>
+      }
 
       <div class="mb-6 flex items-end gap-2">
         <label class="flex-1 space-y-1 text-xs text-slate-500">

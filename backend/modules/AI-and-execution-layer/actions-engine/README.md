@@ -39,6 +39,19 @@ Remote actions are executed through the workflow-engine's single-task
 runner (`POST /tasks/execute`), which performs the registered module call.
 This keeps HTTP service-call execution shared with workflows.
 
+## Authorization
+
+Backend actions exposed through REST or MCP must declare `requiredPermission`
+as `resourceKey:permissionKey`; actions without one are denied by default.
+Callers must send a bearer token and `x-tenant-id`. The Security PDP derives
+the user from the token and validates active tenant membership. Remote-action
+execution forwards that context through workflow-engine to the target
+module, where data/deployment PEPs enforce authorization again.
+
+Set the same strong `WORKFLOW_TASK_TOKEN` in actions-engine and
+workflow-engine. It protects the internal single-task endpoint and is
+separate from the caller's bearer token. Do not log or expose either token.
+
 ## Local dev
 
 ```bash

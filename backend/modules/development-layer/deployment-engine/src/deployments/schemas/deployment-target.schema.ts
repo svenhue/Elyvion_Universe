@@ -7,8 +7,11 @@ export type TargetType = (typeof TARGET_TYPES)[number];
 
 @Schema({ timestamps: true })
 export class DeploymentTarget {
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true })
   name!: string;
+
+  @Prop({ required: true })
+  tenantId!: string;
 
   @Prop({ enum: TARGET_TYPES, required: true })
   type!: TargetType;
@@ -23,3 +26,4 @@ export class DeploymentTarget {
 
 export type DeploymentTargetDocument = DeploymentTarget & Document;
 export const DeploymentTargetSchema = SchemaFactory.createForClass(DeploymentTarget);
+DeploymentTargetSchema.index({ tenantId: 1, name: 1 }, { unique: true });

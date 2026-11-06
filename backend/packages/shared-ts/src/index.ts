@@ -11,4 +11,6 @@ export * from './actions/register-remote-action';
 export * from './logging/log-event';
 export * from './security/check-authorization';
 export * from './security/register-authorization';
+export * from './security/require-authorization';
+export * from './security/redact-sensitive';
 export * from './version-control/record-version';

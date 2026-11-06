@@ -28,7 +28,7 @@ export async function createOidcProvider(issuerUrl: string) {
     claims: {
       openid: ['sub'],
       email: ['email'],
-      profile: ['name', 'roles'],
+      profile: ['name'],
     },
     features: {
       devInteractions: { enabled: false },
@@ -72,7 +72,6 @@ export async function createOidcProvider(issuerUrl: string) {
             sub: user.id,
             email: user.email,
             name: user.name ?? undefined,
-            roles: user.roles,
           };
         },
       };

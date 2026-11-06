@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, NotFoundException, Param, Post } from '@nestjs/common';
-import { checkAuthorization, envelope, logEvent } from '@elyvion/shared';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Req } from '@nestjs/common';
+import { checkAuthorization, envelope, logEvent, redactSensitive } from '@elyvion/shared';
+import { Request } from 'express';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ActionMetadata } from './action.types';
 import { ActionsRegistry } from './actions.registry';
@@ -10,9 +11,11 @@ import { RemoteActionsService } from './remote-actions.service';
 const LOGGING_URL = process.env.LOGGING_URL ?? 'http://localhost:3030';
 const SECURITY_URL = process.env.SECURITY_URL ?? 'http://localhost:3022';
 
-interface SubjectContext {
-  subjectId?: string;
-  subjectType?: 'user' | 'agent';
+interface AuthorizationContext {
+  authorization?: string;
+  tenantId?: string;
+  workspaceId?: string;
+  environmentId?: string;
 }
 
 /**
@@ -92,22 +95,25 @@ export class ActionsController {
    * declare a `requiredPermission` ("jede Action muss exposen, welche
    * Berechtigung erforderlich ist"). `FrontendActionsService.execute`
    * does both the same way for frontend-target actions, on the browser
-   * side. Subject identity comes from headers, not the body, so it
-   * never collides with the action's own input shape — see
-   * `x-subject-id`/`x-subject-type`.
+   * side. The PDP derives the subject from the validated bearer token;
+   * the tenant is passed separately and checked against membership.
    */
   @Post('execute/:key')
   async execute(
     @Param('key') key: string,
     @Body() body: unknown,
-    @Headers('x-subject-id') subjectId?: string,
-    @Headers('x-subject-type') subjectType?: 'user' | 'agent',
+    @Req() request: Request,
   ) {
-    const subject: SubjectContext = { subjectId, subjectType };
+    const authorizationContext: AuthorizationContext = {
+      authorization: request.headers.authorization,
+      tenantId: headerValue(request.headers['x-tenant-id']),
+      workspaceId: headerValue(request.headers['x-workspace-id']),
+      environmentId: headerValue(request.headers['x-environment-id']),
+    };
 
     const entry = this.registry.get(key);
     if (entry) {
-      await this.assertAuthorized(key, entry.metadata.requiredPermission, subject);
+      await this.assertAuthorized(key, entry.metadata.requiredPermission, authorizationContext);
       const parsed = entry.metadata.inputSchema.safeParse(body ?? {});
       if (!parsed.success) {
         throw new BadRequestException(parsed.error.issues);
@@ -124,9 +130,13 @@ export class ActionsController {
 
     const remoteEntry = await this.remoteActions.findOne(key);
     if (remoteEntry) {
-      await this.assertAuthorized(key, remoteEntry.requiredPermission, subject);
+      await this.assertAuthorized(key, remoteEntry.requiredPermission, authorizationContext);
       try {
-        const output = await this.remoteActions.execute(remoteEntry, (body ?? {}) as Record<string, unknown>);
+        const output = await this.remoteActions.execute(
+          remoteEntry,
+          (body ?? {}) as Record<string, unknown>,
+          authorizationContext,
+        );
         void this.logExecution(key, 'info', body, output);
         return envelope(output);
       } catch (error) {
@@ -147,12 +157,31 @@ export class ActionsController {
   private async assertAuthorized(
     actionKey: string,
     requiredPermission: string | undefined,
-    subject: SubjectContext,
+    authorizationContext: AuthorizationContext,
   ): Promise<void> {
-    if (!requiredPermission) return;
-    const result = await checkAuthorization({ securityUrl: SECURITY_URL, requiredPermission, ...subject });
+    if (!requiredPermission) {
+      void this.logExecution(
+        actionKey,
+        'error',
+        { tenantId: authorizationContext.tenantId },
+        undefined,
+        'Action has no requiredPermission and is denied by default.',
+      );
+      throw new ForbiddenException(`Action "${actionKey}" has no requiredPermission and is denied by default.`);
+    }
+    const result = await checkAuthorization({
+      securityUrl: SECURITY_URL,
+      requiredPermission,
+      ...authorizationContext,
+    });
     if (!result.allowed) {
-      void this.logExecution(actionKey, 'error', subject, undefined, `Autorisierung verweigert: ${result.reason}`);
+      void this.logExecution(
+        actionKey,
+        'error',
+        { tenantId: authorizationContext.tenantId, workspaceId: authorizationContext.workspaceId },
+        undefined,
+        `Autorisierung verweigert: ${result.reason}`,
+      );
       throw new ForbiddenException(`Nicht autorisiert für Action "${actionKey}": ${result.reason}`);
     }
   }
@@ -170,7 +199,11 @@ export class ActionsController {
       level,
       message: level === 'info' ? `Action "${actionKey}" ausgeführt.` : `Action "${actionKey}" fehlgeschlagen.`,
       actionKey,
-      context: { input, output, error: error instanceof Error ? error.message : error ? String(error) : undefined },
+      context: {
+        input: redactSensitive(input),
+        output: redactSensitive(output),
+        error: error instanceof Error ? error.name : error ? 'Action failed' : undefined,
+      },
     });
   }
 
@@ -191,4 +224,8 @@ export class ActionsController {
     }
     return envelope(await this.remoteActions.upsert(parsed.data));
   }
+}
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }

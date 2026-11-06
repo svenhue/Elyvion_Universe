@@ -1,5 +1,11 @@
 import { NestFactory } from '@nestjs/core';
-import { ElyvionExceptionFilter, registerModule, registerRemoteAction } from '@elyvion/shared';
+import {
+  ElyvionExceptionFilter,
+  registerModule,
+  registerPermission,
+  registerRemoteAction,
+  registerResource,
+} from '@elyvion/shared';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
@@ -28,6 +34,20 @@ async function bootstrap() {
     healthCheckUrl: `http://localhost:${port}/health`,
     version: '0.1.0',
   });
+
+  const securityUrl = process.env.SECURITY_URL ?? 'http://localhost:3022';
+  await registerResource({ securityUrl, key: moduleName, name: 'Data Engine' });
+  for (const [key, name] of [
+    ['data.entity.create', 'Create entity'],
+    ['data.entity.read', 'Read entities'],
+    ['data.entity.delete', 'Delete entity'],
+    ['data.record.create', 'Create records'],
+    ['data.record.read', 'Read records'],
+    ['data.record.update', 'Update records'],
+    ['data.record.delete', 'Delete records'],
+  ]) {
+    await registerPermission({ securityUrl, resourceKey: moduleName, key, name });
+  }
 
   // Exposes this module's own capabilities as actions, so an agent "whose
   // job is editing a whole data model" can see what entities exist,

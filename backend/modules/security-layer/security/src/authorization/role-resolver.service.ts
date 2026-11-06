@@ -12,8 +12,8 @@ export class RoleResolverService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Every role a subject effectively has: its direct assignments plus each of their ancestors. */
-  async effectiveRoleIds(subjectId: string, subjectType: 'user' | 'agent'): Promise<string[]> {
-    const assignments = await this.prisma.roleAssignment.findMany({ where: { subjectId, subjectType } });
+  async effectiveRoleIds(subjectId: string, subjectType: 'user' | 'agent', tenantId: string): Promise<string[]> {
+    const assignments = await this.prisma.roleAssignment.findMany({ where: { subjectId, subjectType, tenantId } });
     const result = new Set(assignments.map((a) => a.roleId));
     for (const roleId of assignments.map((a) => a.roleId)) {
       for (const ancestor of await this.ancestorsOf(roleId)) result.add(ancestor);

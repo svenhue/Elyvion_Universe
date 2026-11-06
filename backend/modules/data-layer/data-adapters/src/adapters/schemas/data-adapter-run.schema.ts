@@ -7,6 +7,15 @@ export type RunStatus = (typeof RUN_STATUSES)[number];
 /** One execution of a data adapter's stream — manually triggered or by its cron schedule. */
 @Schema()
 export class DataAdapterRun {
+  @Prop({ required: true, index: true })
+  tenantId!: string;
+
+  @Prop({ required: true })
+  environmentId!: string;
+
+  @Prop({ required: true })
+  workspaceId!: string;
+
   @Prop({ type: Types.ObjectId, ref: 'DataAdapterConfig', required: true, index: true })
   adapterId!: Types.ObjectId;
 

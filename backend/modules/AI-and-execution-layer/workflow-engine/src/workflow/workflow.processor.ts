@@ -146,8 +146,14 @@ export class WorkflowProcessor extends WorkerHost {
   executeTask(
     step: CallServiceStep,
     context: Record<string, unknown> = {},
+    authorizationContext?: {
+      authorization: string;
+      tenantId: string;
+      workspaceId?: string;
+      environmentId?: string;
+    },
   ): Promise<unknown> {
-    return this.executeStep(step, context);
+    return this.executeStep(step, context, authorizationContext);
   }
 
   private nextStepIds(
@@ -176,6 +182,12 @@ export class WorkflowProcessor extends WorkerHost {
   private async executeStep(
     step: WorkflowStep,
     context: Record<string, unknown>,
+    authorizationContext?: {
+      authorization: string;
+      tenantId: string;
+      workspaceId?: string;
+      environmentId?: string;
+    },
   ): Promise<unknown> {
     switch (step.type) {
       case 'set-variable':
@@ -217,7 +229,21 @@ export class WorkflowProcessor extends WorkerHost {
           : undefined;
         const response = await fetch(url, {
           method: step.method ?? 'GET',
-          headers: { 'content-type': 'application/json' },
+          headers: {
+            'content-type': 'application/json',
+            ...(authorizationContext
+              ? {
+                  authorization: authorizationContext.authorization,
+                  'x-tenant-id': authorizationContext.tenantId,
+                  ...(authorizationContext.workspaceId
+                    ? { 'x-workspace-id': authorizationContext.workspaceId }
+                    : {}),
+                  ...(authorizationContext.environmentId
+                    ? { 'x-environment-id': authorizationContext.environmentId }
+                    : {}),
+                }
+              : {}),
+          },
           body: body ? JSON.stringify(body) : undefined,
         });
         return { status: response.status, body: await safeJson(response) };

@@ -4,38 +4,71 @@ export interface CheckAuthorizationOptions {
   securityUrl: string;
   /** `"resourceKey:permissionKey"`, as stored on an action's `requiredPermission`. */
   requiredPermission: string;
-  subjectId?: string;
-  subjectType?: 'user' | 'agent';
+  authorization?: string;
+  tenantId?: string;
+  workspaceId?: string;
+  environmentId?: string;
   objectId?: string;
 }
 
 export interface AuthorizationResult {
   allowed: boolean;
   reason: string;
+  decision: 'ALLOW' | 'DENY';
 }
 
 /**
- * Calls the `security` module's `POST /authorize` — the one place that
- * decides "darf der Agent/Benutzer das?" before an action with a
- * `requiredPermission` runs (see actions-engine's `ActionsController`
- * and the frontend's `FrontendActionsService`). Unlike `logEvent`, this
- * is NOT fire-and-forget: a caller awaits it and must not run the action
- * if `allowed` is false. If the security module itself is unreachable,
- * this fails open (allowed: true) with a reason saying so — the same
- * "don't let infrastructure be a bigger outage than the thing it
- * protects" tradeoff `registerRemoteAction`'s retry loop makes, just
- * applied to a synchronous check instead of a retried one.
+ * Calls the versioned PDP endpoint. Missing identity context, invalid
+ * permission metadata, malformed responses, and PDP failures all deny.
  */
 export async function checkAuthorization(options: CheckAuthorizationOptions): Promise<AuthorizationResult> {
-  const [resourceKey, permissionKey] = options.requiredPermission.split(':');
+  const [resourceKey, permissionKey, ...extra] = options.requiredPermission.split(':');
+  if (!resourceKey || !permissionKey || extra.length > 0) {
+    return { allowed: false, decision: 'DENY', reason: 'invalid requiredPermission format' };
+  }
+  if (!options.authorization?.startsWith('Bearer ')) {
+    return { allowed: false, decision: 'DENY', reason: 'a valid bearer token is required' };
+  }
+  if (!options.tenantId?.trim()) {
+    return { allowed: false, decision: 'DENY', reason: 'x-tenant-id is required' };
+  }
+
   try {
-    const response = await axios.post<{ data: AuthorizationResult }>(
-      `${options.securityUrl}/authorize`,
-      { resourceKey, permissionKey, subjectId: options.subjectId, subjectType: options.subjectType, objectId: options.objectId },
-      { timeout: 3000 },
+    const response = await axios.post<{
+      data?: { decision?: unknown; reason?: unknown };
+    }>(
+      `${options.securityUrl}/v1/authorize`,
+      {
+        action: permissionKey,
+        resource: {
+          type: resourceKey,
+          ...(options.objectId ? { id: options.objectId } : {}),
+          attributes: {
+            ...(options.tenantId ? { tenantId: options.tenantId } : {}),
+            ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+            ...(options.environmentId ? { environmentId: options.environmentId } : {}),
+          },
+        },
+        context: options.environmentId ? { environment: options.environmentId } : {},
+      },
+      {
+        headers: {
+          authorization: options.authorization,
+          'x-tenant-id': options.tenantId,
+        },
+        timeout: 5000,
+      },
     );
-    return response.data.data;
-  } catch (err) {
-    return { allowed: true, reason: `security module unreachable, failing open: ${err instanceof Error ? err.message : err}` };
+    const decision = response.data.data;
+    if (decision?.decision === 'ALLOW' || decision?.decision === 'DENY') {
+      return {
+        allowed: decision.decision === 'ALLOW',
+        decision: decision.decision,
+        reason: typeof decision.reason === 'string' ? decision.reason : 'no reason supplied',
+      };
+    }
+    return { allowed: false, decision: 'DENY', reason: 'authorization service returned an invalid decision' };
+  } catch {
+    return { allowed: false, decision: 'DENY', reason: 'authorization service is unavailable' };
   }
 }

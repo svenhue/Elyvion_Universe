@@ -17,24 +17,42 @@ export class ApiClientService {
   private readonly http = inject(HttpClient);
   private readonly gatewayUrl = inject(ELYVION_GATEWAY_URL);
 
-  get<T>(moduleName: string, path: string) {
-    return this.http.get<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`);
+  get<T>(moduleName: string, path: string, headers?: Record<string, string>) {
+    return this.http.get<ResponseEnvelope<T>>(
+      `${this.gatewayUrl}/api/${moduleName}${path}`,
+      headers ? { headers } : {},
+    );
   }
 
-  post<T>(moduleName: string, path: string, body: unknown) {
-    return this.http.post<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`, body);
+  post<T>(moduleName: string, path: string, body: unknown, headers?: Record<string, string>) {
+    return this.http.post<ResponseEnvelope<T>>(
+      `${this.gatewayUrl}/api/${moduleName}${path}`,
+      body,
+      headers ? { headers } : {},
+    );
   }
 
-  patch<T>(moduleName: string, path: string, body: unknown) {
-    return this.http.patch<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`, body);
+  patch<T>(moduleName: string, path: string, body: unknown, headers?: Record<string, string>) {
+    return this.http.patch<ResponseEnvelope<T>>(
+      `${this.gatewayUrl}/api/${moduleName}${path}`,
+      body,
+      headers ? { headers } : {},
+    );
   }
 
-  put<T>(moduleName: string, path: string, body: unknown) {
-    return this.http.put<ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`, body);
+  put<T>(moduleName: string, path: string, body: unknown, headers?: Record<string, string>) {
+    return this.http.put<ResponseEnvelope<T>>(
+      `${this.gatewayUrl}/api/${moduleName}${path}`,
+      body,
+      headers ? { headers } : {},
+    );
   }
 
   /** Most DELETEs return nothing; a few (e.g. "remove this member and give me the updated parent back") return the envelope like any other verb — `delete<Solution>(...)` opts into that instead of `void`. */
-  delete<T = void>(moduleName: string, path: string) {
-    return this.http.delete<T extends void ? void : ResponseEnvelope<T>>(`${this.gatewayUrl}/api/${moduleName}${path}`);
+  delete<T = void>(moduleName: string, path: string, headers?: Record<string, string>) {
+    return this.http.delete<T extends void ? void : ResponseEnvelope<T>>(
+      `${this.gatewayUrl}/api/${moduleName}${path}`,
+      headers ? { headers } : {},
+    );
   }
 }

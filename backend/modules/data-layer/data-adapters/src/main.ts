@@ -42,9 +42,17 @@ async function bootstrap() {
   // den Aktionen zuweisen") — a working example of the full pattern, see
   // security/README.md for which other modules still need this.
   await registerResource({ securityUrl, key: moduleName, name: 'Data-Adapters' });
-  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'create_data_adapter', name: 'Daten-Adapter anlegen' });
-  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'delete_data_adapter', name: 'Daten-Adapter löschen' });
-  await registerPermission({ securityUrl, resourceKey: moduleName, key: 'start_data_stream', name: 'Datenstream starten' });
+  for (const [key, name] of [
+    ['data.adapter.create', 'Create data adapter'],
+    ['data.adapter.read', 'Read data adapters'],
+    ['data.adapter.update', 'Update data adapters'],
+    ['data.adapter.delete', 'Delete data adapters'],
+    ['data.adapter.test', 'Test data adapters'],
+    ['data.adapter.deploy', 'Deploy data adapters'],
+    ['data.adapter.secret.configure', 'Configure adapter secret references'],
+  ] as const) {
+    await registerPermission({ securityUrl, resourceKey: moduleName, key, name });
+  }
 
   // Exposes "start a data stream" / "schedule a cronjob" as actions, so
   // workflows and agents can drive data adapters the same way a person
@@ -68,7 +76,7 @@ async function bootstrap() {
     category: 'data-adapters',
     path: '/adapters',
     method: 'POST',
-    requiredPermission: `${moduleName}:create_data_adapter`,
+    requiredPermission: `${moduleName}:data.adapter.create`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -76,6 +84,7 @@ async function bootstrap() {
         type: { type: 'string', enum: ['http', 'file', 'jdbc', 'sap'] },
         description: { type: 'string' },
         connectionConfig: { type: 'object' },
+        secrets: { type: 'array', items: { type: 'object' } },
         schedule: { type: 'string' },
         enabled: { type: 'boolean' },
       },
@@ -89,7 +98,7 @@ async function bootstrap() {
     category: 'data-adapters',
     path: '/adapters/{id}',
     method: 'DELETE',
-    requiredPermission: `${moduleName}:delete_data_adapter`,
+    requiredPermission: `${moduleName}:data.adapter.delete`,
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   });
   await register({
@@ -99,7 +108,7 @@ async function bootstrap() {
     category: 'data-adapters',
     path: '/adapters/{id}/runs',
     method: 'POST',
-    requiredPermission: `${moduleName}:start_data_stream`,
+    requiredPermission: `${moduleName}:data.adapter.test`,
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   });
   await register({
@@ -109,6 +118,7 @@ async function bootstrap() {
     category: 'data-adapters',
     path: '/adapters/{id}/schedule',
     method: 'PATCH',
+    requiredPermission: `${moduleName}:data.adapter.update`,
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string' }, schedule: { type: 'string' } },

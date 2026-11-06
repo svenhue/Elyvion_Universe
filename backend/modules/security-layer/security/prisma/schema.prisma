@@ -61,7 +61,7 @@ model Role {
   assignments RoleAssignment[]
 
   /// Roles this role directly inherits from.
-  parentsOf RoleInheritance[] @relation("ChildRole")
+  parentsOf  RoleInheritance[] @relation("ChildRole")
   /// Roles that directly inherit from this role.
   childrenOf RoleInheritance[] @relation("ParentRole")
 }
@@ -82,6 +82,7 @@ model RolePermission {
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permissionId String
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  obligations  Json?
 
   @@unique([roleId, permissionId])
 }
@@ -92,12 +93,14 @@ model RoleAssignment {
   id          String      @id @default(uuid())
   subjectId   String
   subjectType SubjectType
+  /// `unscoped` preserves legacy rows without granting them in any tenant.
+  tenantId    String      @default("unscoped")
   roleId      String
   role        Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
   createdAt   DateTime    @default(now())
 
-  @@unique([subjectId, roleId])
-  @@index([subjectId])
+  @@unique([subjectId, subjectType, tenantId, roleId])
+  @@index([subjectId, subjectType, tenantId])
 }
 
 /// Instance-level override on top of the role-based decision — "wenn ich
@@ -112,12 +115,168 @@ model ObjectPermission {
   id           String       @id @default(uuid())
   subjectId    String
   subjectType  SubjectType
+  /// Existing unscoped grants are retained but are not effective in a tenant.
+  tenantId     String       @default("unscoped")
   permissionId String
   permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   objectId     String
   effect       AccessEffect
   createdAt    DateTime     @default(now())
 
-  @@unique([subjectId, permissionId, objectId])
-  @@index([subjectId, permissionId])
+  @@unique([subjectId, subjectType, tenantId, permissionId, objectId])
+  @@index([subjectId, subjectType, tenantId, permissionId])
+}
+
+model AuditLog {
+  id                   String   @id @default(uuid())
+  requestId            String?
+  userId               String?
+  tenantId             String?
+  action               String
+  resourceType         String
+  resourceId           String?
+  decision             String
+  reason               String
+  matchedPolicies      String[] @default([])
+  evaluatedPermissions String[] @default([])
+  obligations          Json?
+  actorType            String?
+  workspaceId          String?
+  environmentId        String?
+  createdAt            DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@index([decision, createdAt])
+}
+
+model Workspace {
+  id          String               @id @default(uuid())
+  tenantId    String
+  name        String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  memberships WorkspaceMembership[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model WorkspaceMembership {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String
+  status      String    @default("active")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, status])
+}
+
+model Environment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  key         String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  secrets     Secret[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model SecretStore {
+  id            String   @id @default(uuid())
+  tenantId      String
+  environmentId String
+  provider      String   @default("elyvion-envelope-v1")
+  createdAt     DateTime @default(now())
+
+  @@unique([tenantId, environmentId])
+  @@index([tenantId])
+}
+
+model Secret {
+  id            String            @id @default(uuid())
+  tenantId      String
+  environmentId String
+  workspaceId   String?
+  adapterId     String
+  ownerId       String
+  name          String
+  type          String
+  status        String            @default("active")
+  currentVersion Int              @default(1)
+  canonicalPath String            @unique
+  expiresAt     DateTime?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  environment   Environment      @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  versions      SecretVersion[]
+  references    SecretReference[]
+
+  @@index([tenantId, environmentId, workspaceId, adapterId])
+  @@index([tenantId, status])
+}
+
+model SecretVersion {
+  id              String   @id @default(uuid())
+  secretId        String
+  version         Int
+  ciphertext      String
+  iv              String
+  authTag         String
+  wrappedDek      String
+  keyIv           String
+  keyAuthTag      String
+  algorithm       String   @default("aes-256-gcm")
+  keyVersion      String
+  createdBy       String
+  createdAt       DateTime @default(now())
+  secret          Secret   @relation(fields: [secretId], references: [id], onDelete: Cascade)
+
+  @@unique([secretId, version])
+  @@index([keyVersion])
+}
+
+model SecretReference {
+  id              String   @id @default(uuid())
+  secretId        String
+  tenantId        String
+  environmentId   String
+  workspaceId     String?
+  adapterId       String
+  configKey       String
+  versionPolicy   String   @default("latest")
+  pinnedVersion   Int?
+  requiredMinimum Int?
+  canonicalPath   String   @unique
+  createdAt       DateTime @default(now())
+  secret          Secret   @relation(fields: [secretId], references: [id], onDelete: Cascade)
+
+  @@unique([environmentId, adapterId, configKey])
+  @@index([tenantId, workspaceId, adapterId])
+}
+
+model SecretAccessLog {
+  id            String   @id @default(uuid())
+  tenantId      String
+  environmentId String?
+  workspaceId   String?
+  adapterId     String?
+  secretId      String?
+  actorId       String?
+  actorType     String
+  action        String
+  outcome       String
+  reason        String?
+  requestId     String?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([secretId, createdAt])
+  @@index([actorId, createdAt])
 }

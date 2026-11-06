@@ -11,6 +11,9 @@ export const fieldDefSchema = z
     transitions: z.record(z.string(), z.array(z.string())).optional(),
   })
   .superRefine((field, context) => {
+    if (['_id', '__v', 'createdAt', 'tenantId', 'updatedAt'].includes(field.name)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'Dieses Feld ist für Systemdaten reserviert.' });
+    }
     if ((field.type === 'enum' || field.type === 'multi_enum') && (!field.options || field.options.length === 0)) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['options'], message: 'enum-Feld braucht mindestens eine Option.' });
     }
@@ -37,7 +40,7 @@ export const fieldDefSchema = z
 export type FieldDefDto = z.infer<typeof fieldDefSchema>;
 
 export const createEntitySchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1).max(120),
   fields: z.array(fieldDefSchema).min(1),
 });
 export type CreateEntityDto = z.infer<typeof createEntitySchema>;

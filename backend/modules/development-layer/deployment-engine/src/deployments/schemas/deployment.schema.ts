@@ -9,6 +9,9 @@ export class Deployment {
   @Prop({ required: true })
   name!: string;
 
+  @Prop({ required: true })
+  tenantId!: string;
+
   @Prop({ type: Types.ObjectId, ref: 'DeploymentTarget', required: true })
   targetId!: Types.ObjectId;
 
@@ -38,3 +41,4 @@ export class Deployment {
 
 export type DeploymentDocument = Deployment & Document;
 export const DeploymentSchema = SchemaFactory.createForClass(Deployment);
+DeploymentSchema.index({ tenantId: 1, createdAt: -1 });

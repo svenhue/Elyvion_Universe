@@ -28,6 +28,9 @@ export class DataAdaptersComponent implements OnInit {
   readonly loadError = signal('');
   readonly triggering = signal(false);
 
+  readonly tenantId = signal('');
+  readonly workspaceId = signal('');
+  readonly environmentId = signal('');
   readonly newName = signal('');
   readonly newType = signal<AdapterType>('http');
   readonly newConnectionConfig = signal('{\n  "url": ""\n}');
@@ -44,7 +47,11 @@ export class DataAdaptersComponent implements OnInit {
   }
 
   private reload(): void {
-    this.api.list().subscribe({
+    if (!this.hasScope()) {
+      this.adapters.set([]);
+      return;
+    }
+    this.api.list(this.scope()).subscribe({
       next: (adapters) => this.adapters.set(adapters),
       error: () => this.loadError.set('Daten-Adapter konnten nicht geladen werden.'),
     });
@@ -53,37 +60,60 @@ export class DataAdaptersComponent implements OnInit {
   select(adapter: DataAdapterConfig): void {
     this.selectedId.set(adapter._id);
     this.scheduleDraft.set(adapter.schedule ?? '');
-    this.api.listRuns(adapter._id).subscribe({ next: (runs) => this.runs.set(runs) });
+    this.api.listRuns(adapter._id, this.scope()).subscribe({ next: (runs) => this.runs.set(runs) });
   }
 
-  async createAdapter(): Promise<void> {
+  async createAdapter(event: Event): Promise<void> {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
     const name = this.newName().trim();
     if (!name || this.creating()) return;
+    if (!this.hasScope()) {
+      this.createError.set('Tenant, Workspace und Umgebung müssen angegeben werden.');
+      return;
+    }
     this.creating.set(true);
     this.createError.set('');
     try {
       const connectionConfig = JSON.parse(this.newConnectionConfig() || '{}');
+      const formData = new FormData(form);
+      const secretValue = formData.get('secretValue');
+      const secretName = formData.get('secretName');
+      const configKey = formData.get('configKey');
+      const secretType = formData.get('secretType');
+      const secrets =
+        typeof secretValue === 'string' && secretValue
+          ? [{
+              name: typeof secretName === 'string' && secretName ? secretName : 'Adapter credential',
+              type: typeof secretType === 'string' ? secretType as 'password' | 'api_key' | 'token' | 'private_key' | 'oauth_client_secret' : 'api_key',
+              configKey: typeof configKey === 'string' && configKey ? configKey : 'headers.authorization',
+              value: secretValue,
+            }]
+          : [];
       const created = await firstValueFrom(
         this.api.create({
           name,
           type: this.newType(),
           connectionConfig,
+          secrets,
           schedule: this.newSchedule().trim() || undefined,
-        }),
+        }, this.scope()),
       );
       this.newName.set('');
       this.newSchedule.set('');
       this.adapters.update((adapters) => [...adapters, created]);
       this.select(created);
     } catch (error) {
-      this.createError.set(error instanceof Error ? error.message : 'Adapter konnte nicht angelegt werden.');
+      this.createError.set('Adapter konnte nicht sicher angelegt werden. Prüfe Konfiguration und Berechtigungen.');
     } finally {
+      const secretInput = form.querySelector<HTMLInputElement>('[name="secretValue"]');
+      if (secretInput) secretInput.value = '';
       this.creating.set(false);
     }
   }
 
   async removeAdapter(id: string): Promise<void> {
-    await firstValueFrom(this.api.remove(id));
+    await firstValueFrom(this.api.remove(id, this.scope()));
     this.adapters.update((adapters) => adapters.filter((a) => a._id !== id));
     if (this.selectedId() === id) {
       this.selectedId.set(null);
@@ -96,10 +126,10 @@ export class DataAdaptersComponent implements OnInit {
     if (!id || this.triggering()) return;
     this.triggering.set(true);
     try {
-      await firstValueFrom(this.api.triggerRun(id));
-      this.api.listRuns(id).subscribe({ next: (runs) => this.runs.set(runs) });
+      await firstValueFrom(this.api.triggerRun(id, this.scope()));
+      this.api.listRuns(id, this.scope()).subscribe({ next: (runs) => this.runs.set(runs) });
     } catch (error) {
-      this.loadError.set(error instanceof Error ? error.message : 'Lauf fehlgeschlagen.');
+      this.loadError.set('Adapter-Test fehlgeschlagen oder wurde nicht autorisiert.');
     } finally {
       this.triggering.set(false);
     }
@@ -109,7 +139,25 @@ export class DataAdaptersComponent implements OnInit {
     const id = this.selectedId();
     if (!id) return;
     const value = this.scheduleDraft().trim();
-    const updated = await firstValueFrom(this.api.schedule(id, value || null));
+    const updated = await firstValueFrom(this.api.schedule(id, value || null, this.scope()));
     this.adapters.update((adapters) => adapters.map((a) => (a._id === id ? updated : a)));
+  }
+
+  scopeChanged(): void {
+    this.selectedId.set(null);
+    this.runs.set([]);
+    this.reload();
+  }
+
+  private hasScope(): boolean {
+    return !!this.tenantId().trim() && !!this.workspaceId().trim() && !!this.environmentId().trim();
+  }
+
+  private scope() {
+    return {
+      tenantId: this.tenantId().trim(),
+      workspaceId: this.workspaceId().trim(),
+      environmentId: this.environmentId().trim(),
+    };
   }
 }

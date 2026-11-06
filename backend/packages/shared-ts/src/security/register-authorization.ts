@@ -36,12 +36,18 @@ export async function registerPermission(options: RegisterPermissionOptions, ret
 async function postWithRetry(url: string, payload: unknown, retries: number, delayMs: number, label: string): Promise<void> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      await axios.post(url, payload, { timeout: 3000 });
+      await axios.post(url, payload, {
+        timeout: 3000,
+        headers: process.env.SECURITY_OPERATOR_TOKEN
+          ? { 'x-security-operator-token': process.env.SECURITY_OPERATOR_TOKEN }
+          : {},
+      });
       return;
     } catch (err) {
       if (attempt === retries) {
-        console.error(`[registerAuthorization] Failed to register "${label}" at ${url} after ${retries} attempts:`, err instanceof Error ? err.message : err);
-        return;
+        const message = `[registerAuthorization] Failed to register "${label}" at ${url} after ${retries} attempts`;
+        console.error(message, err instanceof Error ? err.message : err);
+        throw new Error(message, { cause: err });
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

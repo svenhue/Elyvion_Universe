@@ -3,13 +3,10 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterUserDto, VerifyCredentialsDto } from './dto/users.dto';
 
-const DEFAULT_ROLE = 'user';
-
 export interface SafeUser {
   id: string;
   email: string;
   name: string | null;
-  roles: string[];
 }
 
 @Injectable()
@@ -23,20 +20,12 @@ export class UsersService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const role = await this.prisma.role.upsert({
-      where: { name: DEFAULT_ROLE },
-      create: { name: DEFAULT_ROLE },
-      update: {},
-    });
-
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         passwordHash,
         name: dto.name,
-        roles: { create: [{ roleId: role.id }] },
       },
-      include: { roles: { include: { role: true } } },
     });
 
     return this.toSafeUser(user);
@@ -45,7 +34,6 @@ export class UsersService {
   async verifyCredentials(dto: VerifyCredentialsDto): Promise<SafeUser> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: { roles: { include: { role: true } } },
     });
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
@@ -60,7 +48,6 @@ export class UsersService {
   async findById(id: string): Promise<SafeUser> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { roles: { include: { role: true } } },
     });
     if (!user) {
       throw new NotFoundException(`User "${id}" not found`);
@@ -70,7 +57,6 @@ export class UsersService {
 
   async findAll(): Promise<SafeUser[]> {
     const users = await this.prisma.user.findMany({
-      include: { roles: { include: { role: true } } },
       orderBy: { email: 'asc' },
     });
     return users.map((u) => this.toSafeUser(u));
@@ -81,7 +67,6 @@ export class UsersService {
     const user = await this.prisma.user.update({
       where: { id },
       data: dto,
-      include: { roles: { include: { role: true } } },
     });
     return this.toSafeUser(user);
   }
@@ -91,17 +76,55 @@ export class UsersService {
     await this.prisma.user.delete({ where: { id } });
   }
 
+  async hasActiveMembership(userId: string, tenantId: string): Promise<boolean> {
+    const membership = await this.prisma.tenantMembership.findFirst({
+      where: {
+        userId,
+        tenantId,
+        status: 'active',
+        tenant: { status: 'active' },
+      },
+      select: { id: true },
+    });
+    return membership !== null;
+  }
+
+  async bootstrapTenant(name: string, email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) throw new NotFoundException(`User "${email}" not found`);
+
+    return this.prisma.$transaction(async (transaction) => {
+      const tenant = await transaction.tenant.create({ data: { name } });
+      await transaction.tenantMembership.create({
+        data: { tenantId: tenant.id, userId: user.id, status: 'active' },
+      });
+      return { tenantId: tenant.id, userId: user.id, tenantName: tenant.name };
+    });
+  }
+
+  async addTenantMember(tenantId: string, email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) throw new NotFoundException(`User "${email}" not found`);
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant || tenant.status !== 'active') throw new NotFoundException(`Active tenant "${tenantId}" not found`);
+
+    return this.prisma.tenantMembership.upsert({
+      where: { tenantId_userId: { tenantId, userId: user.id } },
+      create: { tenantId, userId: user.id, status: 'active' },
+      update: { status: 'active' },
+      select: { id: true, tenantId: true, userId: true, status: true },
+    });
+  }
+
   private toSafeUser(user: {
     id: string;
     email: string;
     name: string | null;
-    roles: { role: { name: string } }[];
   }): SafeUser {
     return {
       id: user.id,
       email: user.email,
       name: user.name,
-      roles: user.roles.map((r) => r.role.name),
     };
   }
 }

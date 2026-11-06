@@ -24,45 +24,6 @@ export const ADMIN_RESOURCE_CONFIGS: AdminResourceConfig[] = [
     ],
   },
   {
-    id: 'users',
-    label: 'Users: Accounts',
-    moduleName: 'users',
-    listPath: '',
-    idField: 'id',
-    creatable: false, // registration has its own flow (password handling)
-    updatePath: (id) => `/by-id/${id}`,
-    deletePath: (id) => `/by-id/${id}`,
-    fields: [
-      { key: 'id', label: 'ID', type: 'text', editable: false },
-      { key: 'email', label: 'E-Mail', type: 'text', required: true },
-      { key: 'name', label: 'Name', type: 'text' },
-      { key: 'roles', label: 'Rollen', type: 'json', editable: false },
-    ],
-  },
-  {
-    id: 'roles',
-    label: 'Users: Rollen',
-    moduleName: 'users',
-    listPath: '/roles',
-    idField: 'id',
-    fields: [
-      { key: 'id', label: 'ID', type: 'text', editable: false, inList: false },
-      { key: 'name', label: 'Name', type: 'text', required: true },
-      { key: 'permissions', label: 'Permissions', type: 'json', editable: false },
-    ],
-  },
-  {
-    id: 'permissions',
-    label: 'Users: Permissions',
-    moduleName: 'users',
-    listPath: '/permissions',
-    idField: 'id',
-    fields: [
-      { key: 'id', label: 'ID', type: 'text', editable: false, inList: false },
-      { key: 'name', label: 'Name', type: 'text', required: true },
-    ],
-  },
-  {
     id: 'app-configs',
     label: 'App-Config: Anwendungen',
     moduleName: 'app-config',

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Schema as MongooseSchema } from 'mongoose';
 import { z } from 'zod';
 import { FieldDef, FieldType } from './schemas/entity-definition.schema';
@@ -16,13 +17,16 @@ const MONGOOSE_TYPE_BY_FIELD_TYPE: Record<FieldType, unknown> = {
 };
 
 /** The collection a defined entity's own records live in — sanitized so a user-chosen entity name can't collide with or inject into another collection. */
-export function dataCollectionName(entityName: string): string {
-  return `data_${entityName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+export function dataCollectionName(entityName: string, tenantId: string): string {
+  const tenantKey = createHash('sha256').update(tenantId).digest('hex').slice(0, 20);
+  return `data_${tenantKey}_${entityName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
 }
 
 /** Builds the Mongoose schema `EntityRegistryService` registers a dynamic model with — one `required`-aware field per `FieldDef`, plus an `enum` validator where the definition declares `options`, nothing else. */
 export function buildMongooseSchema(fields: FieldDef[]): MongooseSchema {
-  const definition: Record<string, { type: unknown; required: boolean; enum?: string[] }> = {};
+  const definition: Record<string, { type: unknown; required: boolean; enum?: string[]; immutable?: boolean }> = {
+    tenantId: { type: String, required: true, immutable: true },
+  };
   for (const field of fields) {
     const isEnumLike = field.type === 'enum' || field.type === 'multi_enum';
     definition[field.name] = {
@@ -31,7 +35,9 @@ export function buildMongooseSchema(fields: FieldDef[]): MongooseSchema {
       ...(isEnumLike && field.options ? { enum: field.options } : {}),
     };
   }
-  return new MongooseSchema(definition, { timestamps: true, strict: true });
+  const schema = new MongooseSchema(definition, { timestamps: true, strict: true });
+  schema.index({ tenantId: 1 });
+  return schema;
 }
 
 /** Builds a zod schema from `FieldDef[]`, so a record's input is rejected with a clear 400 for a wrong type, an out-of-range `enum` value, or a missing required field — before it ever reaches Mongoose. */

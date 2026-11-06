@@ -2,7 +2,6 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ApiClientService } from '../api/api-client.service';
-import { AuthService } from '../auth/auth.service';
 import { ActionsApiService } from './actions-api.service';
 
 export interface FrontendActionDefinition<TInput = Record<string, unknown>, TOutput = unknown> {
@@ -21,6 +20,12 @@ interface AuthorizeResult {
   reason: string;
 }
 
+export interface FrontendActionAuthorizationScope {
+  tenantId: string;
+  workspaceId?: string;
+  environmentId?: string;
+}
+
 /**
  * The frontend counterpart to actions-engine's backend `ActionsRegistry` —
  * same idea (a named, schema-described, callable action), but the handler
@@ -34,7 +39,6 @@ interface AuthorizeResult {
 export class FrontendActionsService {
   private readonly api = inject(ActionsApiService);
   private readonly apiClient = inject(ApiClientService);
-  private readonly auth = inject(AuthService);
   private readonly actions = new Map<string, FrontendActionDefinition>();
   private builtinsRegistered = false;
 
@@ -63,13 +67,17 @@ export class FrontendActionsService {
    * `ActionsController.execute` does for backend ones ("eigentlich
    * sollte wirklich alles geloggt werden").
    */
-  async execute(key: string, input: Record<string, unknown> = {}): Promise<unknown> {
+  async execute(
+    key: string,
+    input: Record<string, unknown> = {},
+    scope?: FrontendActionAuthorizationScope,
+  ): Promise<unknown> {
     const definition = this.actions.get(key);
     if (!definition) {
       throw new Error(`Frontend-Action "${key}" ist in diesem Tab nicht registriert.`);
     }
     if (definition.requiredPermission) {
-      const result = await this.checkAuthorization(definition.requiredPermission);
+      const result = await this.checkAuthorization(definition.requiredPermission, scope);
       if (!result.allowed) {
         this.logExecution(key, 'error', input, undefined, `Autorisierung verweigert: ${result.reason}`);
         throw new Error(`Nicht autorisiert für Action "${key}": ${result.reason}`);
@@ -85,22 +93,57 @@ export class FrontendActionsService {
     }
   }
 
-  private async checkAuthorization(requiredPermission: string): Promise<AuthorizeResult> {
-    const [resourceKey, permissionKey] = requiredPermission.split(':');
-    const subjectId = this.auth.claims()?.['sub'] as string | undefined;
+  private async checkAuthorization(
+    requiredPermission: string,
+    scope?: FrontendActionAuthorizationScope,
+  ): Promise<AuthorizeResult> {
+    const [resourceKey, permissionKey, ...extra] = requiredPermission.split(':');
+    if (!resourceKey || !permissionKey || extra.length > 0) {
+      return { allowed: false, reason: 'Ungültiges requiredPermission-Format.' };
+    }
+    if (!scope?.tenantId.trim()) {
+      return { allowed: false, reason: 'Für die Autorisierung ist eine Tenant-ID erforderlich.' };
+    }
+
     try {
       return await firstValueFrom(
         this.apiClient
-          .post<AuthorizeResult>('security', '/authorize', {
-            resourceKey,
-            permissionKey,
-            subjectId,
-            subjectType: subjectId ? 'user' : undefined,
-          })
-          .pipe(map((response) => response.data)),
+          .post<{ decision?: unknown; reason?: unknown }>(
+            'security',
+            '/v1/authorize',
+            {
+              action: permissionKey,
+              resource: {
+                type: resourceKey,
+                attributes: {
+                  tenantId: scope.tenantId,
+                  ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
+                  ...(scope.environmentId ? { environmentId: scope.environmentId } : {}),
+                },
+              },
+              context: scope.environmentId ? { environment: scope.environmentId } : {},
+            },
+            {
+              'x-tenant-id': scope.tenantId,
+              ...(scope.workspaceId ? { 'x-workspace-id': scope.workspaceId } : {}),
+              ...(scope.environmentId ? { 'x-environment-id': scope.environmentId } : {}),
+            },
+          )
+          .pipe(
+            map((response) => {
+              const decision = response.data;
+              if (decision.decision !== 'ALLOW' && decision.decision !== 'DENY') {
+                return { allowed: false, reason: 'Ungültige Autorisierungsantwort.' };
+              }
+              return {
+                allowed: decision.decision === 'ALLOW',
+                reason: typeof decision.reason === 'string' ? decision.reason : 'Keine Begründung angegeben.',
+              };
+            }),
+          ),
       );
-    } catch (error) {
-      return { allowed: true, reason: `security module unreachable, failing open: ${error}` };
+    } catch {
+      return { allowed: false, reason: 'Der Autorisierungsdienst ist nicht erreichbar.' };
     }
   }
 
@@ -111,7 +154,11 @@ export class FrontendActionsService {
         level,
         message: level === 'info' ? `Action "${actionKey}" ausgeführt.` : `Action "${actionKey}" fehlgeschlagen.`,
         actionKey,
-        context: { input, output, error: error instanceof Error ? error.message : error ? String(error) : undefined },
+        context: {
+          input: redactActionLog(input),
+          output: redactActionLog(output),
+          error: error instanceof Error ? error.name : error ? 'Action failed' : undefined,
+        },
       })
       .subscribe({ error: () => undefined });
   }
@@ -141,4 +188,17 @@ export class FrontendActionsService {
       },
     });
   }
+}
+
+function redactActionLog(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactActionLog);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      /password|secret|token|api.?key|private.?key|credential|authorization|^value$/i.test(key)
+        ? '[REDACTED]'
+        : redactActionLog(item),
+    ]),
+  );
 }

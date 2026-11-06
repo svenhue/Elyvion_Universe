@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AddParentRoleDto,
@@ -6,20 +12,38 @@ import {
   CreateObjectPermissionDto,
   CreateRoleAssignmentDto,
   CreateRoleDto,
-  GrantPermissionDto,
+  GrantTenantPermissionDto,
   RegisterPermissionDto,
   RegisterResourceDto,
+  authorizationObligationsSchema,
 } from './dto/authorization.dto';
 import { RoleResolverService } from './role-resolver.service';
 
 export interface AuthorizeResult {
-  allowed: boolean;
+  decision: 'ALLOW' | 'DENY';
   reason: string;
+  matchedPolicies: string[];
+  evaluatedPermissions: string[];
+  obligations: {
+    audit?: boolean;
+    maskColumns?: string[];
+    rowFilter?: Record<string, unknown>;
+    requireMfa?: boolean;
+    requireApproval?: boolean;
+    maxRows?: number;
+  };
+}
+
+export interface AuthorizationRequest extends AuthorizeDto {
+  userId: string;
+  tenantId: string;
+  authorization: string;
 }
 
 @Injectable()
 export class AuthorizationService {
   private readonly logger = new Logger(AuthorizationService.name);
+  private readonly usersServiceUrl = process.env.USERS_SERVICE_URL ?? 'http://localhost:3013';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -65,12 +89,16 @@ export class AuthorizationService {
     });
   }
 
-  async grantPermission(roleId: string, dto: GrantPermissionDto) {
+  async grantTenantPermission(roleId: string, dto: GrantTenantPermissionDto) {
     await this.mustFindRole(roleId);
     return this.prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId, permissionId: dto.permissionId } },
-      create: { roleId, permissionId: dto.permissionId },
-      update: {},
+      create: {
+        roleId,
+        permissionId: dto.permissionId,
+        obligations: dto.obligations,
+      },
+      update: { obligations: dto.obligations },
     });
   }
 
@@ -103,14 +131,35 @@ export class AuthorizationService {
 
   createAssignment(dto: CreateRoleAssignmentDto) {
     return this.prisma.roleAssignment.upsert({
-      where: { subjectId_roleId: { subjectId: dto.subjectId, roleId: dto.roleId } },
+      where: {
+        subjectId_subjectType_tenantId_roleId: {
+          subjectId: dto.subjectId,
+          subjectType: dto.subjectType,
+          tenantId: dto.tenantId,
+          roleId: dto.roleId,
+        },
+      },
       create: dto,
       update: {},
     });
   }
 
-  listAssignments(subjectId?: string) {
-    return this.prisma.roleAssignment.findMany({ where: subjectId ? { subjectId } : undefined, include: { role: true } });
+  async assignTenantRole(input: { subjectId: string; tenantId: string; roleKey: string }) {
+    const role = await this.prisma.role.findUnique({ where: { key: input.roleKey } });
+    if (!role) throw new NotFoundException(`Role "${input.roleKey}" not found`);
+    return this.createAssignment({
+      subjectId: input.subjectId,
+      subjectType: 'user',
+      tenantId: input.tenantId,
+      roleId: role.id,
+    });
+  }
+
+  listAssignments(subjectId?: string, tenantId?: string) {
+    return this.prisma.roleAssignment.findMany({
+      where: { ...(subjectId ? { subjectId } : {}), ...(tenantId ? { tenantId } : {}) },
+      include: { role: true },
+    });
   }
 
   async removeAssignment(id: string): Promise<void> {
@@ -121,11 +170,23 @@ export class AuthorizationService {
 
   async createObjectPermission(dto: CreateObjectPermissionDto) {
     const permission = await this.findPermissionByKeys(dto.resourceKey, dto.permissionKey);
+    if (!permission) {
+      throw new NotFoundException(`Berechtigung "${dto.resourceKey}:${dto.permissionKey}" wurde nicht gefunden.`);
+    }
     return this.prisma.objectPermission.upsert({
-      where: { subjectId_permissionId_objectId: { subjectId: dto.subjectId, permissionId: permission.id, objectId: dto.objectId } },
+      where: {
+        subjectId_subjectType_tenantId_permissionId_objectId: {
+          subjectId: dto.subjectId,
+          subjectType: dto.subjectType,
+          tenantId: dto.tenantId,
+          permissionId: permission.id,
+          objectId: dto.objectId,
+        },
+      },
       create: {
         subjectId: dto.subjectId,
         subjectType: dto.subjectType,
+        tenantId: dto.tenantId,
         permissionId: permission.id,
         objectId: dto.objectId,
         effect: dto.effect,
@@ -147,55 +208,175 @@ export class AuthorizationService {
 
   // --- The actual decision ---
 
-  /**
-   * Resolution order: no subject context → allow (actions-engine doesn't
-   * thread a real identity through yet; see README) → an object-level
-   * `deny` for this exact object always wins, as a pure blacklist on top
-   * of whatever the role grants → otherwise, a role grant on the
-   * permission allows it (the object-level rules for *other* objects
-   * never affect this one — each rule is local to its own object) → if
-   * no role grants it, an object-level `allow` for this exact object can
-   * still grant it on its own, e.g. for a subject whose role doesn't cover
-   * this permission at all but who should see a handful of objects.
-   */
-  async authorize(dto: AuthorizeDto): Promise<AuthorizeResult> {
-    if (!dto.subjectId || !dto.subjectType) {
-      return { allowed: true, reason: 'no subject context provided — default allow until identity propagation is wired in' };
+  async authorize(request: AuthorizationRequest): Promise<AuthorizeResult> {
+    const action = request.action;
+    const resourceType = request.resource.type;
+    const resourceId = request.resource.id ?? null;
+    const evaluatedPermissions = [action];
+    let decision: AuthorizeResult;
+
+    const membership = await this.hasActiveMembership(request);
+    if (!membership) {
+      decision = deny('No active membership in the selected tenant.', evaluatedPermissions);
+    } else {
+      const assertedTenant = request.resource.attributes['tenantId'];
+      const workspaceId = request.resource.attributes['workspaceId'];
+      const workspaceAccess = typeof workspaceId !== 'string' ||
+        await this.hasActiveWorkspaceMembership(request.userId, request.tenantId, workspaceId);
+      if (!workspaceAccess) {
+        decision = deny('No active membership in the selected workspace.', evaluatedPermissions);
+      } else if (assertedTenant !== undefined && assertedTenant !== request.tenantId) {
+        decision = deny('Resource belongs to a different tenant.', evaluatedPermissions);
+      } else {
+        const permission = await this.findPermissionByKeys(resourceType, action);
+        if (!permission) {
+          decision = deny('Unknown permission.', evaluatedPermissions);
+        } else {
+          decision = await this.evaluateGrant(request, permission.id, evaluatedPermissions);
+        }
+      }
     }
 
-    const permission = await this.findPermissionByKeys(dto.resourceKey, dto.permissionKey).catch(() => null);
-    if (!permission) {
-      this.logger.warn(`Unknown permission "${dto.resourceKey}:${dto.permissionKey}" — denying by default.`);
-      return { allowed: false, reason: `Unbekannte Berechtigung "${dto.resourceKey}:${dto.permissionKey}".` };
+    await this.prisma.auditLog.create({
+      data: {
+        requestId: request.context.requestId,
+        userId: request.userId,
+        tenantId: request.tenantId,
+        action,
+        resourceType,
+        resourceId,
+        decision: decision.decision,
+        reason: decision.reason,
+        matchedPolicies: decision.matchedPolicies,
+        evaluatedPermissions: decision.evaluatedPermissions,
+        obligations: JSON.parse(JSON.stringify(decision.obligations)) as Prisma.InputJsonValue,
+      },
+    });
+    if (decision.decision === 'DENY') {
+      this.logger.warn({
+        userId: request.userId,
+        tenantId: request.tenantId,
+        action,
+        resourceType,
+        resourceId,
+        reason: decision.reason,
+      }, 'Authorization denied');
     }
+    return decision;
+  }
 
-    let objectDeny = false;
-    let objectAllow = false;
-    if (dto.objectId) {
+  private async evaluateGrant(
+    request: AuthorizationRequest,
+    permissionId: string,
+    evaluatedPermissions: string[],
+  ): Promise<AuthorizeResult> {
+    if (request.resource.id) {
       const rule = await this.prisma.objectPermission.findUnique({
-        where: { subjectId_permissionId_objectId: { subjectId: dto.subjectId, permissionId: permission.id, objectId: dto.objectId } },
+        where: {
+          subjectId_subjectType_tenantId_permissionId_objectId: {
+            subjectId: request.userId,
+            subjectType: 'user',
+            tenantId: request.tenantId,
+            permissionId,
+            objectId: request.resource.id,
+          },
+        },
       });
-      objectDeny = rule?.effect === 'deny';
-      objectAllow = rule?.effect === 'allow';
+      if (rule?.effect === 'deny') return deny('Explicitly denied for this resource.', evaluatedPermissions);
+      if (rule?.effect === 'allow') return allow('Explicit resource grant.', [], evaluatedPermissions);
     }
-    if (objectDeny) return { allowed: false, reason: 'Explizit auf Objekt-Ebene verweigert.' };
 
-    const roleIds = await this.roles.effectiveRoleIds(dto.subjectId, dto.subjectType);
-    const grant = roleIds.length
-      ? await this.prisma.rolePermission.findFirst({ where: { roleId: { in: roleIds }, permissionId: permission.id } })
-      : null;
-    if (grant) return { allowed: true, reason: 'Durch Rolle gewährt.' };
-    if (objectAllow) return { allowed: true, reason: 'Explizit auf Objekt-Ebene erlaubt.' };
-    return { allowed: false, reason: 'Keine zugewiesene Rolle und keine Objekt-Freigabe.' };
+    const roleIds = await this.roles.effectiveRoleIds(request.userId, 'user', request.tenantId);
+    if (!roleIds.length) return deny('No role assignment in the selected tenant.', evaluatedPermissions);
+    const grant = await this.prisma.rolePermission.findFirst({
+      where: { roleId: { in: roleIds }, permissionId },
+      include: { role: { select: { key: true } } },
+    });
+    if (!grant) return deny('No matching permission grant.', evaluatedPermissions);
+
+    const parsedObligations = authorizationObligationsSchema.safeParse(grant.obligations ?? {});
+    if (!parsedObligations.success) return deny('Permission grant contains invalid obligations.', evaluatedPermissions);
+    return allow(
+      'Permission granted by tenant-scoped role.',
+      [`role:${grant.role.key}`],
+      evaluatedPermissions,
+      parsedObligations.data,
+    );
+  }
+
+  private async hasActiveMembership(request: AuthorizationRequest): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.usersServiceUrl}/tenant-membership`, {
+        method: 'GET',
+        headers: {
+          authorization: request.authorization,
+          'x-tenant-id': request.tenantId,
+        },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (response.status !== 200) return false;
+      const body: unknown = await response.json();
+      if (!isMembershipResponse(body)) return false;
+      return body.data.userId === request.userId && body.data.tenantId === request.tenantId;
+    } catch (error) {
+      this.logger.warn(
+        `Tenant membership validation failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+  }
+
+  private async hasActiveWorkspaceMembership(
+    userId: string,
+    tenantId: string,
+    workspaceId: string,
+  ): Promise<boolean> {
+    const membership = await this.prisma.workspaceMembership.findFirst({
+      where: {
+        userId,
+        workspaceId,
+        status: 'active',
+        workspace: { tenantId },
+      },
+      select: { id: true },
+    });
+    return !!membership;
   }
 
   private async findPermissionByKeys(resourceKey: string, permissionKey: string) {
     const resource = await this.prisma.resource.findUnique({ where: { key: resourceKey } });
-    if (!resource) throw new NotFoundException(`Resource "${resourceKey}" wurde nicht gefunden.`);
+    if (!resource) return null;
     const permission = await this.prisma.permission.findUnique({
       where: { resourceId_key: { resourceId: resource.id, key: permissionKey } },
     });
-    if (!permission) throw new NotFoundException(`Berechtigung "${resourceKey}:${permissionKey}" wurde nicht gefunden.`);
+    if (!permission) return null;
     return permission;
   }
+}
+
+function isMembershipResponse(value: unknown): value is { data: { userId: string; tenantId: string } } {
+  if (!value || typeof value !== 'object' || !('data' in value)) return false;
+  const data = value.data;
+  return !!data && typeof data === 'object' &&
+    'userId' in data && typeof data.userId === 'string' &&
+    'tenantId' in data && typeof data.tenantId === 'string';
+}
+
+function deny(reason: string, evaluatedPermissions: string[] = []): AuthorizeResult {
+  return {
+    decision: 'DENY',
+    reason,
+    matchedPolicies: [],
+    evaluatedPermissions,
+    obligations: {},
+  };
+}
+
+function allow(
+  reason: string,
+  matchedPolicies: string[],
+  evaluatedPermissions: string[],
+  obligations: AuthorizeResult['obligations'] = {},
+): AuthorizeResult {
+  return { decision: 'ALLOW', reason, matchedPolicies, evaluatedPermissions, obligations };
 }

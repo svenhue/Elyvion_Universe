@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { ElyvionLoggerModule } from '@elyvion/shared';
 import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
-import { RolesModule } from './roles/roles.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -12,7 +11,6 @@ import { UsersModule } from './users/users.module';
     ElyvionLoggerModule.forRoot({ moduleName: 'users' }),
     PrismaModule,
     UsersModule,
-    RolesModule,
   ],
   controllers: [AppController],
 })

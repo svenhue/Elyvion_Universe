@@ -21,6 +21,15 @@ workflows, plus stores both kinds' definitions for the pro-code builder.
   workflow runner without creating a workflow run or step history. The
   actions-engine uses this endpoint to share the runner's service-call
   execution rather than maintaining a second HTTP proxy implementation.
+  This endpoint requires the shared `WORKFLOW_TASK_TOKEN`, a bearer token,
+  and `x-tenant-id`; it forwards only the caller's bearer and tenant context
+  to the target module. Configure the token identically in actions-engine
+  and workflow-engine.
+
+Durable BullMQ workflow runs do not yet carry a caller authorization
+context. Calls from those runs to protected data/deployment endpoints are
+therefore denied; do not put bearer tokens into persisted workflow context.
+A secure delegated-identity mechanism is still needed for that path.
 
 ## Local dev
 
