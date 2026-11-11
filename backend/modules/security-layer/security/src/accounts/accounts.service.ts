@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { RoleResolverService } from '../authorization/role-resolver.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterUserDto, UpdateUserDto, VerifyCredentialsDto } from './dto/accounts.dto';
 
@@ -16,7 +17,10 @@ export interface SafeUser {
 
 @Injectable()
 export class AccountsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly roles: RoleResolverService,
+  ) {}
 
   async register(dto: RegisterUserDto): Promise<SafeUser> {
     const email = normalizeEmail(dto.email);
@@ -97,7 +101,24 @@ export class AccountsService {
     }));
   }
 
+  async hasTenantAccess(userId: string, tenantId: string): Promise<boolean> {
+    if (await this.roles.hasSuperAdminRole(userId, 'user')) {
+      return !!(await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true },
+      }));
+    }
+    return this.hasActiveMembership(userId, tenantId);
+  }
+
   async listActiveTenants(userId: string) {
+    if (await this.roles.hasSuperAdminRole(userId, 'user')) {
+      return this.prisma.tenant.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+    }
+
     const memberships = await this.prisma.tenantMembership.findMany({
       where: {
         userId,

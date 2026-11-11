@@ -21,6 +21,21 @@ export class RoleResolverService {
     return [...result];
   }
 
+  async hasSuperAdminRole(subjectId: string, subjectType: 'user' | 'agent'): Promise<boolean> {
+    const assignments = await this.prisma.roleAssignment.findMany({
+      where: { subjectId, subjectType, tenantId: { not: 'unscoped' } },
+    });
+    const roleIds = new Set(assignments.map((assignment) => assignment.roleId));
+    for (const assignment of assignments) {
+      for (const ancestor of await this.ancestorsOf(assignment.roleId)) roleIds.add(ancestor);
+    }
+    if (!roleIds.size) return false;
+    return !!(await this.prisma.role.findFirst({
+      where: { id: { in: [...roleIds] }, isSuperAdmin: true },
+      select: { id: true },
+    }));
+  }
+
   /** BFS over `RoleInheritance` edges, child → parent, visited-guarded so a pre-existing cycle (shouldn't happen, but data can always be wrong) can't loop forever. */
   async ancestorsOf(roleId: string): Promise<string[]> {
     const visited = new Set<string>();

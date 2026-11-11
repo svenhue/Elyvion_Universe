@@ -211,24 +211,39 @@ export class AuthorizationService {
     const resourceType = request.resource.type;
     const resourceId = request.resource.id ?? null;
     const evaluatedPermissions = [action];
+    const assertedTenant = request.resource.attributes['tenantId'];
+    const targetTenantId = typeof assertedTenant === 'string' ? assertedTenant : request.tenantId;
+    const isSuperAdmin = await this.roles.hasSuperAdminRole(request.userId, 'user');
     let decision: AuthorizeResult;
 
-    const membership = await this.hasActiveMembership(request.userId, request.tenantId);
-    if (!membership) {
-      decision = deny('No active membership in the selected tenant.', evaluatedPermissions);
+    const tenantAccess = isSuperAdmin
+      ? await this.hasTenant(targetTenantId)
+      : await this.hasActiveMembership(request.userId, request.tenantId);
+    if (!tenantAccess) {
+      decision = deny(
+        isSuperAdmin
+          ? 'Target tenant does not exist.'
+          : 'No active membership in the selected tenant.',
+        evaluatedPermissions,
+      );
+    } else if (!isSuperAdmin && assertedTenant !== undefined && assertedTenant !== request.tenantId) {
+      decision = deny('Resource belongs to a different tenant.', evaluatedPermissions);
     } else {
-      const assertedTenant = request.resource.attributes['tenantId'];
       const workspaceId = request.resource.attributes['workspaceId'];
-      const workspaceAccess = typeof workspaceId !== 'string' ||
-        await this.hasActiveWorkspaceMembership(request.userId, request.tenantId, workspaceId);
+      const workspaceAccess = isSuperAdmin || typeof workspaceId !== 'string' ||
+        await this.hasActiveWorkspaceMembership(request.userId, targetTenantId, workspaceId);
       if (!workspaceAccess) {
         decision = deny('No active membership in the selected workspace.', evaluatedPermissions);
-      } else if (assertedTenant !== undefined && assertedTenant !== request.tenantId) {
-        decision = deny('Resource belongs to a different tenant.', evaluatedPermissions);
       } else {
         const permission = await this.findPermissionByKeys(resourceType, action);
         if (!permission) {
           decision = deny('Unknown permission.', evaluatedPermissions);
+        } else if (isSuperAdmin) {
+          decision = allow(
+            'Permission granted by the platform super-admin role.',
+            ['role:admin'],
+            evaluatedPermissions,
+          );
         } else {
           decision = await this.evaluateGrant(request, permission.id, evaluatedPermissions);
         }
@@ -239,7 +254,7 @@ export class AuthorizationService {
       data: {
         requestId: request.context.requestId,
         userId: request.userId,
-        tenantId: request.tenantId,
+        tenantId: targetTenantId,
         action,
         resourceType,
         resourceId,
@@ -313,6 +328,13 @@ export class AuthorizationService {
       select: { id: true },
     });
     return !!membership;
+  }
+
+  private async hasTenant(tenantId: string): Promise<boolean> {
+    return !!(await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    }));
   }
 
   private async hasActiveWorkspaceMembership(

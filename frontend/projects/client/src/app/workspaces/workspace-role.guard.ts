@@ -7,10 +7,7 @@ export const workspaceRoleGuard: CanActivateFn = async (_route, state) => {
   const router = inject(Router);
   await access.initialize();
 
-  const allowed = state.url.startsWith('/platform-configuration')
-    ? access.canOpenPlatformConfiguration()
-    : access.canManageWorkspaces();
-  return allowed ? true : router.createUrlTree(['/']);
+  return  router.createUrlTree(['/']);
 };
 
 export const trafficRoleGuard: CanActivateFn = async () => {

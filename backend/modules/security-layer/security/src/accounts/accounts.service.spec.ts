@@ -1,4 +1,5 @@
 import * as bcrypt from 'bcryptjs';
+import { RoleResolverService } from '../authorization/role-resolver.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountsService } from './accounts.service';
 
@@ -21,12 +22,13 @@ describe('AccountsService', () => {
       findMany: jest.Mock;
       upsert: jest.Mock;
     };
-    tenant: { findUnique: jest.Mock };
+    tenant: { findUnique: jest.Mock; findMany: jest.Mock };
     roleAssignment: { deleteMany: jest.Mock };
     objectPermission: { deleteMany: jest.Mock };
     workspaceMembership: { deleteMany: jest.Mock };
     $transaction: jest.Mock;
   };
+  let roles: { hasSuperAdminRole: jest.Mock };
   let service: AccountsService;
 
   beforeEach(() => {
@@ -44,13 +46,17 @@ describe('AccountsService', () => {
         findMany: jest.fn(),
         upsert: jest.fn(),
       },
-      tenant: { findUnique: jest.fn() },
+      tenant: { findUnique: jest.fn(), findMany: jest.fn() },
       roleAssignment: { deleteMany: jest.fn() },
       objectPermission: { deleteMany: jest.fn() },
       workspaceMembership: { deleteMany: jest.fn() },
       $transaction: jest.fn(async (callback: (transaction: typeof prisma) => unknown) => callback(prisma)),
     };
-    service = new AccountsService(prisma as unknown as PrismaService);
+    roles = { hasSuperAdminRole: jest.fn().mockResolvedValue(false) };
+    service = new AccountsService(
+      prisma as unknown as PrismaService,
+      roles as unknown as RoleResolverService,
+    );
   });
 
   it('stores a hash and returns account metadata only', async () => {
@@ -114,6 +120,33 @@ describe('AccountsService', () => {
       },
       select: { id: true },
     });
+  });
+
+  it('lists every tenant for a platform super-admin', async () => {
+    const tenants = [{ id: 'tenant-a', name: 'A' }, { id: 'tenant-b', name: 'B' }];
+    roles.hasSuperAdminRole.mockResolvedValue(true);
+    prisma.tenant.findMany.mockResolvedValue(tenants);
+
+    await expect(service.listActiveTenants('user-id')).resolves.toEqual(tenants);
+
+    expect(roles.hasSuperAdminRole).toHaveBeenCalledWith('user-id', 'user');
+    expect(prisma.tenant.findMany).toHaveBeenCalledWith({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    expect(prisma.tenantMembership.findMany).not.toHaveBeenCalled();
+  });
+
+  it('lists only active tenant memberships for a regular user', async () => {
+    prisma.tenantMembership.findMany.mockResolvedValue([
+      { tenantId: 'tenant-a', tenant: { name: 'A' } },
+    ]);
+
+    await expect(service.listActiveTenants('user-id')).resolves.toEqual([
+      { id: 'tenant-a', name: 'A' },
+    ]);
+
+    expect(prisma.tenant.findMany).not.toHaveBeenCalled();
   });
 
   it('removes user-linked authorization and workspace records before deleting an account', async () => {

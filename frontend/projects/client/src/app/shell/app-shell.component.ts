@@ -70,6 +70,7 @@ export class AppShellComponent {
       SOLUTIONS_NAV_ITEM,
       RULES_ENGINE_NAV_ITEM,
     ]);
+    console.log(this.workspaceAccess.activeTenantId(), this.workspaceAccess.activeWorkspaceId(), this.workspaceAccess.canOpenPlatformConfiguration())
   }
 
   clearSearch(): void {

@@ -80,8 +80,8 @@ export class AccountsController {
     if (!tenantId?.trim()) throw new BadRequestException('x-tenant-id is required.');
     const payload = await verifyRequestToken(authorization);
     if (!payload.sub) throw new UnauthorizedException('Token has no subject.');
-    if (!(await this.accounts.hasActiveMembership(payload.sub, tenantId))) {
-      throw new ForbiddenException('No active membership in this tenant.');
+    if (!(await this.accounts.hasTenantAccess(payload.sub, tenantId))) {
+      throw new ForbiddenException('No access to this tenant.');
     }
     return envelope({ userId: payload.sub, tenantId });
   }

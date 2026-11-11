@@ -11,8 +11,9 @@ describe('AuthorizationService', () => {
     rolePermission: { findFirst: jest.Mock };
     workspaceMembership: { findFirst: jest.Mock };
     tenantMembership: { findFirst: jest.Mock };
+    tenant: { findUnique: jest.Mock };
   };
-  let roles: { effectiveRoleIds: jest.Mock };
+  let roles: { effectiveRoleIds: jest.Mock; hasSuperAdminRole: jest.Mock };
   let service: AuthorizationService;
 
   beforeEach(() => {
@@ -24,8 +25,12 @@ describe('AuthorizationService', () => {
       rolePermission: { findFirst: jest.fn().mockResolvedValue(null) },
       workspaceMembership: { findFirst: jest.fn().mockResolvedValue(null) },
       tenantMembership: { findFirst: jest.fn().mockResolvedValue({ id: 'membership-id' }) },
+      tenant: { findUnique: jest.fn().mockResolvedValue({ id: 'tenant-a' }) },
     };
-    roles = { effectiveRoleIds: jest.fn().mockResolvedValue([]) };
+    roles = {
+      effectiveRoleIds: jest.fn().mockResolvedValue([]),
+      hasSuperAdminRole: jest.fn().mockResolvedValue(false),
+    };
     service = new AuthorizationService(
       prisma as unknown as PrismaService,
       roles as unknown as RoleResolverService,
@@ -44,7 +49,7 @@ describe('AuthorizationService', () => {
         data: expect.objectContaining({ decision: 'DENY', tenantId: 'tenant-a' }),
       }),
     );
-    expect(roles.effectiveRoleIds).not.toHaveBeenCalled();
+    expect(roles.hasSuperAdminRole).toHaveBeenCalledWith('user-1', 'user');
   });
 
   it('denies a resource whose tenant does not match the verified membership', async () => {
@@ -54,7 +59,7 @@ describe('AuthorizationService', () => {
 
     expect(decision.decision).toBe('DENY');
     expect(decision.reason).toContain('different tenant');
-    expect(roles.effectiveRoleIds).not.toHaveBeenCalled();
+    expect(roles.hasSuperAdminRole).toHaveBeenCalledWith('user-1', 'user');
   });
 
   it('uses the active tenant role and returns validated obligations', async () => {
@@ -79,6 +84,79 @@ describe('AuthorizationService', () => {
       },
       select: { id: true },
     });
+  });
+
+  it('allows a super-admin role every registered permission without object or workspace grants', async () => {
+    roles.hasSuperAdminRole.mockResolvedValue(true);
+    prisma.objectPermission.findUnique.mockResolvedValue({ effect: 'deny' } as never);
+
+    const decision = await service.authorize(makeRequest({
+      resource: {
+        type: 'data-engine',
+        id: 'record-1',
+        attributes: { workspaceId: 'workspace-b', tenantId: 'tenant-a' },
+      },
+    }));
+
+    expect(decision).toEqual(expect.objectContaining({
+      decision: 'ALLOW',
+      reason: 'Permission granted by the platform super-admin role.',
+      matchedPolicies: ['role:admin'],
+      obligations: {},
+    }));
+    expect(roles.hasSuperAdminRole).toHaveBeenCalledWith('user-1', 'user');
+    expect(prisma.workspaceMembership.findFirst).not.toHaveBeenCalled();
+    expect(prisma.objectPermission.findUnique).not.toHaveBeenCalled();
+    expect(prisma.rolePermission.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('allows a platform super-admin to access a different tenant without membership', async () => {
+    roles.hasSuperAdminRole.mockResolvedValue(true);
+    prisma.tenantMembership.findFirst.mockResolvedValue(null);
+
+    const decision = await service.authorize(makeRequest({
+      tenantId: 'tenant-a',
+      resource: {
+        type: 'data-engine',
+        id: 'record-1',
+        attributes: { tenantId: 'tenant-b' },
+      },
+    }));
+
+    expect(decision.decision).toBe('ALLOW');
+    expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
+      where: { id: 'tenant-b' },
+      select: { id: true },
+    });
+    expect(prisma.tenantMembership.findFirst).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ tenantId: 'tenant-b', decision: 'ALLOW' }),
+    }));
+  });
+
+  it('does not let a platform super-admin authorize a tenant that does not exist', async () => {
+    roles.hasSuperAdminRole.mockResolvedValue(true);
+    prisma.tenant.findUnique.mockResolvedValue(null);
+
+    const decision = await service.authorize(makeRequest({
+      resource: {
+        type: 'data-engine',
+        attributes: { tenantId: 'missing-tenant' },
+      },
+    }));
+
+    expect(decision.decision).toBe('DENY');
+    expect(decision.reason).toBe('Target tenant does not exist.');
+  });
+
+  it('does not grant a super-admin role an unregistered permission', async () => {
+    prisma.resource.findUnique.mockResolvedValue(null);
+
+    const decision = await service.authorize(makeRequest());
+
+    expect(decision.decision).toBe('DENY');
+    expect(decision.reason).toBe('Unknown permission.');
+    expect(roles.hasSuperAdminRole).toHaveBeenCalledWith('user-1', 'user');
   });
 
   it('does not return an allow decision when the required audit write fails', async () => {

@@ -92,19 +92,21 @@ model Permission {
   @@unique([resourceId, key])
 }
 
-/// A named set of permissions. Roles can inherit from other roles
+/// A named set of permissions. Platform super-admin roles bypass permission
+/// grants across existing tenants. Roles can inherit from other roles
 /// (`RoleInheritance`) — "eine Rolle kann die Rechte von anderen Rollen
 /// erben" — so a role's *effective* permissions are its own direct grants
 /// plus everything every ancestor role grants, resolved at
 /// authorization time (see `authorization/role-resolver.service.ts`).
 model Role {
-  id          String           @id @default(uuid())
-  key         String           @unique
-  name        String
-  description String?
-  createdAt   DateTime         @default(now())
-  permissions RolePermission[]
-  assignments RoleAssignment[]
+  id            String           @id @default(uuid())
+  key           String           @unique
+  name          String
+  description   String?
+  isSuperAdmin  Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  permissions   RolePermission[]
+  assignments   RoleAssignment[]
 
   /// Roles this role directly inherits from.
   parentsOf  RoleInheritance[] @relation("ChildRole")

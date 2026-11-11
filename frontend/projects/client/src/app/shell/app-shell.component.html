@@ -7,20 +7,18 @@
       class="mb-3 grid size-7 shrink-0 place-items-center rounded-lg bg-indigo-500 text-xs font-bold text-white"
     >E</a>
 
-    @if (workspaceAccess.canOpenPlatformConfiguration()) {
       <a
         routerLink="/platform-configuration"
         routerLinkActive="bg-slate-800 text-white"
         class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
       >Plattformkonfiguration</a>
-    }
-    @if (workspaceAccess.canManageWorkspaces()) {
+    
       <a
         routerLink="/workspace-management"
         routerLinkActive="bg-slate-800 text-white"
         class="rounded-md px-3 py-1.5 font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
       >Arbeitsbereichverwaltung</a>
-    }
+    
 
     <div class="relative mb-3">
       <input
