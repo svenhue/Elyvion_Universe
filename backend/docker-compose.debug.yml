@@ -1,0 +1,141 @@
+x-node-debug: &node-debug
+  environment:
+    NODE_OPTIONS: "--inspect=0.0.0.0:9229 --enable-source-maps"
+
+services:
+  auth:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9230:9229"
+  security:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9231:9229"
+  registry:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9232:9229"
+  gateway:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9233:9229"
+  actions-engine:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9234:9229"
+  app-config:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9235:9229"
+  chat:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9236:9229"
+  data-adapters:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9237:9229"
+  data-engine:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9238:9229"
+  deployment-engine:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9239:9229"
+  integrations:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9240:9229"
+  local-llm:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9253:9229"
+  repository:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9242:9229"
+  rules-engine:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9243:9229"
+  solutions:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9244:9229"
+  telemetry:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9245:9229"
+  traffic:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9246:9229"
+  version-control:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9247:9229"
+  workflow-engine:
+    <<: *node-debug
+    ports:
+      - "127.0.0.1:9248:9229"
+  agent-engine:
+    command:
+      - uv
+      - run
+      - --with
+      - debugpy
+      - python
+      - -m
+      - debugpy
+      - --listen
+      - 0.0.0.0:5678
+      - -m
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8101"
+    ports:
+      - "127.0.0.1:9250:5678"
+  ontology-engine:
+    command:
+      - uv
+      - run
+      - --with
+      - debugpy
+      - python
+      - -m
+      - debugpy
+      - --listen
+      - 0.0.0.0:5678
+      - -m
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8100"
+    ports:
+      - "127.0.0.1:9251:5678"
+  elyvion-platform:
+    command:
+      - uv
+      - run
+      - --with
+      - debugpy
+      - python
+      - -m
+      - debugpy
+      - --listen
+      - 0.0.0.0:5678
+      - -m
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "3030"
+    ports:
+      - "127.0.0.1:9252:5678"

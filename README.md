@@ -37,6 +37,19 @@ Der Frontend-Log liegt unter `.dev-run/logs/client.log` (gitignored); Backend-Lo
 ./scripts/dev-down.sh --with-infra  # stoppt zusätzlich alle Compose-Container, Daten bleiben erhalten
 ```
 
+### Backend debuggen
+
+Mit diesen Skripten startet dieselbe Entwicklungsumgebung, aber zusätzlich mit Node.js-Inspectoren und `debugpy` für alle Python-Services:
+
+```bash
+./scripts/dev-debug-up.sh
+./scripts/dev-debug-down.sh
+```
+
+VS Code-Konfigurationen liegen in [`.vscode/launch.json`](.vscode/launch.json). Nach dem Start `F5` drücken und **Backend (alle Services)** oder **Alles (Frontend + Backend)** auswählen. Einzelne Services können separat über ihre eigene Konfiguration gestartet werden; **Frontend (Chrome)** öffnet den laufenden Client in Chrome. Die Compound-Konfigurationen verbinden VS Code mit den bereits laufenden Debug-Ports. Alle Debug-Ports sind nur an `localhost` gebunden; `debugpy` wird beim Start der Python-Services durch `uv` bereitgestellt.
+
+Der `local-llm`-Service ist unter `http://localhost:9241` erreichbar und lauscht intern im Docker-Netzwerk auf Port `9299`. Sein VS-Code-Inspector läuft separat auf Port `9253`.
+
 Das Skript ist absichtlich ein einfaches Shell-Skript und keine Infrastructure-as-Code-Lösung über die Deployment-Engine — die Deployment-Engine baut und betreibt *kompilierte* Artefakte gegen ein Ziel (lokal Docker, später Cloud-Provider); hier geht es um das Hochfahren der eigenen Entwicklungsumgebung. Backend-Code läuft in Compose-Containern, der Angular-Client lokal mit Live-Reload.
 
 ### Manueller Start

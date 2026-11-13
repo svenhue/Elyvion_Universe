@@ -8,8 +8,10 @@ export interface LlmMessage {
 
 @Injectable()
 export class LlmService {
-  private readonly endpoint =
-    `${(process.env.LOCAL_LLM_URL ?? 'http://localhost:3028').replace(/\/+$/, '')}/v1/chat/completions`;
+  private readonly endpoint = new URL(
+    '/v1/chat/completions',
+    process.env.LOCAL_LLM_URL ?? 'http://local-llm:9299',
+  ).toString();
 
   async complete(history: LlmMessage[]): Promise<string> {
     const tokenFile = process.env.LOCAL_LLM_SERVICE_TOKEN_FILE;
@@ -35,7 +37,7 @@ export class LlmService {
         body: JSON.stringify({ messages: history }),
         signal: AbortSignal.timeout(300_000),
       });
-    } catch {
+    } catch (e) {
       throw new ServiceUnavailableException('Local LLM is unavailable.');
     }
     if (!response.ok) throw new ServiceUnavailableException('Local LLM request failed.');

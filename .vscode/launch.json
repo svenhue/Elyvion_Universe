@@ -1,0 +1,326 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Frontend (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:4200",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMaps": true
+    },
+    {
+      "name": "auth",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9230,
+      "localRoot": "${workspaceFolder}/backend/modules/security-layer/auth",
+      "remoteRoot": "/workspace/modules/security-layer/auth",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/security-layer/auth/dist/**/*.js"]
+    },
+    {
+      "name": "security",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9231,
+      "localRoot": "${workspaceFolder}/backend/modules/security-layer/security",
+      "remoteRoot": "/workspace/modules/security-layer/security",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/security-layer/security/dist/**/*.js"]
+    },
+    {
+      "name": "registry",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9232,
+      "localRoot": "${workspaceFolder}/backend/modules/registry",
+      "remoteRoot": "/workspace/modules/registry",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/registry/dist/**/*.js"]
+    },
+    {
+      "name": "gateway",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9233,
+      "localRoot": "${workspaceFolder}/backend/modules/gateway",
+      "remoteRoot": "/workspace/modules/gateway",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/gateway/dist/**/*.js"]
+    },
+    {
+      "name": "actions-engine",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9234,
+      "localRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/actions-engine",
+      "remoteRoot": "/workspace/modules/AI-and-execution-layer/actions-engine",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/AI-and-execution-layer/actions-engine/dist/**/*.js"]
+    },
+    {
+      "name": "app-config",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9235,
+      "localRoot": "${workspaceFolder}/backend/modules/resource-layer/app-config",
+      "remoteRoot": "/workspace/modules/resource-layer/app-config",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/resource-layer/app-config/dist/**/*.js"]
+    },
+    {
+      "name": "chat",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9236,
+      "localRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/chat",
+      "remoteRoot": "/workspace/modules/AI-and-execution-layer/chat",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/AI-and-execution-layer/chat/dist/**/*.js"]
+    },
+    {
+      "name": "data-adapters",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9237,
+      "localRoot": "${workspaceFolder}/backend/modules/data-layer/data-adapters",
+      "remoteRoot": "/workspace/modules/data-layer/data-adapters",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/data-layer/data-adapters/dist/**/*.js"]
+    },
+    {
+      "name": "data-engine",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9238,
+      "localRoot": "${workspaceFolder}/backend/modules/data-layer/data-engine",
+      "remoteRoot": "/workspace/modules/data-layer/data-engine",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/data-layer/data-engine/dist/**/*.js"]
+    },
+    {
+      "name": "deployment-engine",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9239,
+      "localRoot": "${workspaceFolder}/backend/modules/development-layer/deployment-engine",
+      "remoteRoot": "/workspace/modules/development-layer/deployment-engine",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/development-layer/deployment-engine/dist/**/*.js"]
+    },
+    {
+      "name": "integrations",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9240,
+      "localRoot": "${workspaceFolder}/backend/modules/resource-layer/integrations",
+      "remoteRoot": "/workspace/modules/resource-layer/integrations",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/resource-layer/integrations/dist/**/*.js"]
+    },
+    {
+      "name": "local-llm",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9253,
+      "localRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/local-llm",
+      "remoteRoot": "/workspace/modules/AI-and-execution-layer/local-llm",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/AI-and-execution-layer/local-llm/dist/**/*.js"]
+    },
+    {
+      "name": "repository",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9242,
+      "localRoot": "${workspaceFolder}/backend/modules/development-layer/repository",
+      "remoteRoot": "/workspace/modules/development-layer/repository",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/development-layer/repository/dist/**/*.js"]
+    },
+    {
+      "name": "rules-engine",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9243,
+      "localRoot": "${workspaceFolder}/backend/modules/businesslogic-and-rule-layer/rules-engine",
+      "remoteRoot": "/workspace/modules/businesslogic-and-rule-layer/rules-engine",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/businesslogic-and-rule-layer/rules-engine/dist/**/*.js"]
+    },
+    {
+      "name": "solutions",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9244,
+      "localRoot": "${workspaceFolder}/backend/modules/resource-layer/solutions",
+      "remoteRoot": "/workspace/modules/resource-layer/solutions",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/resource-layer/solutions/dist/**/*.js"]
+    },
+    {
+      "name": "telemetry",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9245,
+      "localRoot": "${workspaceFolder}/backend/modules/observability/telemetry",
+      "remoteRoot": "/workspace/modules/observability/telemetry",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/observability/telemetry/dist/**/*.js"]
+    },
+    {
+      "name": "traffic",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9246,
+      "localRoot": "${workspaceFolder}/backend/modules/observability/traffic",
+      "remoteRoot": "/workspace/modules/observability/traffic",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/observability/traffic/dist/**/*.js"]
+    },
+    {
+      "name": "version-control",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9247,
+      "localRoot": "${workspaceFolder}/backend/modules/development-layer/version-control",
+      "remoteRoot": "/workspace/modules/development-layer/version-control",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/development-layer/version-control/dist/**/*.js"]
+    },
+    {
+      "name": "workflow-engine",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 9248,
+      "localRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/workflow-engine",
+      "remoteRoot": "/workspace/modules/AI-and-execution-layer/workflow-engine",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/backend/modules/AI-and-execution-layer/workflow-engine/dist/**/*.js"]
+    },
+    {
+      "name": "agent-engine",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 9250
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/agent-engine",
+          "remoteRoot": "/workspace/backend/modules/AI-and-execution-layer/agent-engine"
+        }
+      ]
+    },
+    {
+      "name": "ontology-engine",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 9251
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/backend/modules/knowledge-layer/ontology-engine",
+          "remoteRoot": "/workspace/backend/modules/knowledge-layer/ontology-engine"
+        }
+      ]
+    },
+    {
+      "name": "elyvion-platform",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 9252
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/backend/elyvion_platform",
+          "remoteRoot": "/workspace/backend/elyvion_platform"
+        }
+      ]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Backend (alle Services)",
+      "configurations": [
+        "auth",
+        "security",
+        "registry",
+        "gateway",
+        "actions-engine",
+        "app-config",
+        "chat",
+        "data-adapters",
+        "data-engine",
+        "deployment-engine",
+        "integrations",
+        "local-llm",
+        "repository",
+        "rules-engine",
+        "solutions",
+        "telemetry",
+        "traffic",
+        "version-control",
+        "workflow-engine",
+        "agent-engine",
+        "ontology-engine",
+        "elyvion-platform"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Alles (Frontend + Backend)",
+      "configurations": [
+        "Frontend (Chrome)",
+        "auth",
+        "security",
+        "registry",
+        "gateway",
+        "actions-engine",
+        "app-config",
+        "chat",
+        "data-adapters",
+        "data-engine",
+        "deployment-engine",
+        "integrations",
+        "local-llm",
+        "repository",
+        "rules-engine",
+        "solutions",
+        "telemetry",
+        "traffic",
+        "version-control",
+        "workflow-engine",
+        "agent-engine",
+        "ontology-engine",
+        "elyvion-platform"
+      ],
+      "stopAll": true
+    }
+  ]
+}

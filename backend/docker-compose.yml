@@ -301,7 +301,7 @@ services:
       MODULE_BASE_URL: http://chat:3016
       REGISTRY_URL: http://registry:3010
       MONGODB_URI: mongodb://mongo:27017/elyvion_chat
-      LOCAL_LLM_URL: http://local-llm:3028
+      LOCAL_LLM_URL: http://local-llm:9299
       LOCAL_LLM_SERVICE_TOKEN_FILE: /run/secrets/local_llm_service_token
     secrets:
       - traffic_ingest_token
@@ -473,9 +473,9 @@ services:
       - ./modules/AI-and-execution-layer/local-llm/.env
     environment:
       <<: *module-environment
-      PORT: "3028"
+      PORT: "9299"
       MODULE_NAME: local-llm
-      MODULE_BASE_URL: http://local-llm:3028
+      MODULE_BASE_URL: http://local-llm:9299
       REGISTRY_URL: http://registry:3010
       MONGODB_URI: mongodb://mongo:27017/elyvion_local_llm
       SECURITY_URL: http://security:3022
@@ -484,6 +484,8 @@ services:
     secrets:
       - traffic_ingest_token
       - local_llm_service_token
+    ports:
+      - "127.0.0.1:9241:9299"
     depends_on:
       registry:
         condition: service_healthy
@@ -724,7 +726,7 @@ services:
       ENVIRONMENT: development
       TRAFFIC_INGEST_URL: http://traffic:3025/internal/events
       TRAFFIC_INGEST_TOKEN_FILE: /run/secrets/traffic_ingest_token
-      LOCAL_LLM_URL: http://local-llm:3028
+      LOCAL_LLM_URL: http://local-llm:9299
       LOCAL_LLM_SERVICE_TOKEN_FILE: /run/secrets/local_llm_service_token
       ACTIONS_ENGINE_MCP_URL: http://actions-engine:3015/mcp
     secrets:

@@ -120,12 +120,12 @@ log "installing backend (pnpm workspace) dependencies…"
 
 PRISMA_MODULE_PATHS=(registry AI-and-execution-layer/workflow-engine logging security-layer/security observability/telemetry observability/traffic)
 for module_path in "${PRISMA_MODULE_PATHS[@]}"; do
-  module_name="$(basename "$module_path")"
+  module_name="${module_path##*/}"
   module_dir="$ROOT_DIR/backend/modules/$module_path"
   [ -d "$module_dir/prisma" ] || continue
-  log "applying Prisma migrations for $module_name…"
+  log "applying Prisma migrations for ${module_name}…"
   (cd "$module_dir" && npx prisma migrate deploy && npx prisma generate) \
-    || fail "Prisma migration failed for $module_name — check $module_dir/.env's DATABASE_URL."
+    || fail "Prisma migration failed for ${module_name} — check ${module_dir}/.env's DATABASE_URL."
 done
 
 log "building all backend service images…"
