@@ -6,7 +6,7 @@ import { ChatService } from './chat.service';
 import { LlmService } from './llm/llm.service';
 import { Conversation, ConversationSchema } from './schemas/conversation.schema';
 import { Message, MessageSchema } from './schemas/message.schema';
-
+import { OllamaService } from './llm/ollama.service';
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -15,6 +15,6 @@ import { Message, MessageSchema } from './schemas/message.schema';
     ]),
   ],
   controllers: [ChatController],
-  providers: [ChatService, LlmService, AgentEngineClient],
+  providers: [ChatService, LlmService, AgentEngineClient, OllamaService],
 })
 export class ChatModule {}

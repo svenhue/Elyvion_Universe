@@ -13,5 +13,6 @@ import { ChatModule } from './chat/chat.module';
     ChatModule,
   ],
   controllers: [AppController],
+  
 })
 export class AppModule {}

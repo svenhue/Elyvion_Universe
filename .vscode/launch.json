@@ -1,6 +1,7 @@
 {
   "version": "0.2.0",
   "configurations": [
+    
     {
       "name": "Frontend (Chrome)",
       "type": "pwa-chrome",
@@ -85,6 +86,22 @@
       "remoteRoot": "/workspace/modules/AI-and-execution-layer/chat",
       "sourceMaps": true,
       "outFiles": ["${workspaceFolder}/backend/modules/AI-and-execution-layer/chat/dist/**/*.js"]
+    },
+        {
+  "name": "chat-solo",
+  "type": "node",
+  "request": "attach",
+  "address": "localhost",
+  "port": 9229,
+  "restart": true,
+  "localRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/chat",
+  "remoteRoot": "${workspaceFolder}/backend/modules/AI-and-execution-layer/chat",
+  "sourceMaps": true,
+  "outFiles": [
+    "${workspaceFolder}/backend/modules/AI-and-execution-layer/chat/dist/**/*.js"
+  ],
+  "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+
     },
     {
       "name": "data-adapters",

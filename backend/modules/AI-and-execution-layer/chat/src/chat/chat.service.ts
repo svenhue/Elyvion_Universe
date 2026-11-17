@@ -48,7 +48,7 @@ export class ChatService {
   }
 
   /** Saves the user's message, then replies — via the LLM directly for a `"chat"` conversation, or via `agent-engine`'s multi-agent run for an `"agent"` one. */
-  async postMessage(conversationId: string, content: string): Promise<MessageRecord> {
+  async postMessage(conversationId: string, content: string): Promise<string | ReadableStream<Uint8Array>>{
     const conversation = await this.conversations.findById(conversationId).lean();
     if (!conversation) {
       throw new NotFoundException(`Unterhaltung "${conversationId}" wurde nicht gefunden.`);
@@ -56,16 +56,9 @@ export class ChatService {
 
     await this.messages.create({ conversationId, role: 'user', content });
 
-    const reply =
-      conversation.mode === 'agent'
-        ? formatAgentRunResult(await this.agentEngine.run(content))
-        : await this.llm.complete(
+    return await this.llm.complete(
             (await this.listMessages(conversationId)).map((message) => ({ role: message.role, content: message.content })),
           );
-
-    const assistantDoc = await this.messages.create({ conversationId, role: 'assistant', content: reply });
-    await this.conversations.updateOne({ _id: conversationId }, { $set: { updatedAt: new Date() } });
-    return toMessageRecord(assistantDoc.toObject());
   }
 }
 
